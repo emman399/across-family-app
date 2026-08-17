@@ -1,4 +1,4 @@
-d<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -754,7 +754,7 @@ window._auth = {
     // Fire immediately with current state
     if(window._authUser !== undefined) setTimeout(() => cb(window._authUser), 0);
   },
-  async signInWithEmailAndPassword(auth, email, pass){
+  async signInWithEmailAndPassword(email, pass){
     const r = await fetch(`${AUTHBASE}/accounts:signInWithPassword?key=${FB_CONFIG.apiKey}`,{
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({email, password:pass, returnSecureToken:true})
@@ -773,7 +773,7 @@ window._auth = {
     try{ localStorage.removeItem('across_session'); }catch(e){}
     _notifyAuth(null);
   },
-  async sendPasswordResetEmail(auth, email){
+  async sendPasswordResetEmail(email){
     const r = await fetch(`${AUTHBASE}/accounts:sendOobCode?key=${FB_CONFIG.apiKey}`,{
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({requestType:'PASSWORD_RESET', email})
@@ -802,7 +802,7 @@ window._auth = {
     window._idToken = d.idToken;
   },
   EmailAuthProvider:{ credential:(email,pass)=>({_email:email,_password:pass}) },
-  async createUserWithEmailAndPassword(auth, email, pass){
+  async createUserWithEmailAndPassword(email, pass){
     const r = await fetch(`${AUTHBASE}/accounts:signUp?key=${FB_CONFIG.apiKey}`,{
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({email, password:pass, returnSecureToken:true})
@@ -1554,7 +1554,7 @@ setTimeout(() => _notifyAuth(null), 50);
   </div>
 </div>
 <div style="text-align:center; padding:14px 10px 6px; font-size:11px; color:rgba(255,255,255,0.4); letter-spacing:0.03em;">
-  v1.0
+  v1.1
 </div>
 
 </div><!-- /app-shell -->
@@ -2932,8 +2932,8 @@ setTimeout(() => _notifyAuth(null), 50);
       showLoading();
       const user = _auth.currentUser;
       const cred = _auth.EmailAuthProvider.credential(user.email, current);
-      await user.reauthenticateWithCredential(cred);
-      await user.updatePassword(newPwd);
+      await _auth.reauthenticateWithCredential(user, cred);
+      await _auth.updatePassword(user, newPwd);
       hideLoading();
       document.getElementById('pwdCurrent').value = '';
       document.getElementById('pwdNew').value = '';
