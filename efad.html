@@ -1,0 +1,2089 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<title>EFAD Attendance Tracker</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,500;0,600;0,700;1,500&family=Public+Sans:wght@400;500;600;700&display=swap');
+
+  :root {
+    --ink: #00416A;
+    --ink-soft: #1F3C4D;
+    --muted: #5C7386;
+    --bg: #F5F7F8;
+    --surface: #FFFFFF;
+    --border: #DCE3E7;
+    --accent: #FF7518;
+    --accent-soft: #FFE3C7;
+    --present: #2F7A54;
+    --present-soft: #DCEEE3;
+    --absent: #C0392B;
+    --absent-soft: #F6DBD6;
+    --excused: #B8862E;
+    --excused-soft: #F1E4C6;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink-soft); font-family: 'Public Sans', ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  h1, h2, h3, .serif { font-family: 'Lora', Georgia, serif; margin: 0; }
+  a { color: inherit; }
+  .muted { color: var(--muted); }
+  .ink { color: var(--ink); }
+  button, input, select, textarea { font-family: inherit; font-size: 14px; }
+
+  /* Layout */
+  .layout { display: flex; flex-direction: column; min-height: 100vh; }
+  @media (min-width: 768px) { .layout { flex-direction: row; } }
+  .sidebar { background: var(--surface); border-bottom: 1px solid var(--border); }
+  @media (min-width: 768px) { .sidebar { width: 240px; min-height: 100vh; border-bottom: none; border-right: 1px solid var(--border); display: flex; flex-direction: column; } }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+  .brand-name { font-size: 17px; font-weight: 600; color: var(--ink); line-height: 1.1; }
+  .brand-sub { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
+  .navlinks { display: flex; gap: 4px; padding: 10px; flex: 1; }
+  @media (min-width: 768px) { .navlinks { flex-direction: column; } }
+  .navlink { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 8px; font-size: 14px; font-weight: 500; background: transparent; border: none; color: var(--ink); cursor: pointer; text-align: left; }
+  .navlink:hover { background: rgba(0,0,0,0.05); }
+  .navlink.active { background: var(--ink); color: #F6F7F1; }
+  .signout-wrap { padding: 12px; display: none; }
+  @media (min-width: 768px) { .signout-wrap.show { display: block; } }
+  .signout { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 12px; border-radius: 8px; font-size: 14px; font-weight: 500; color: var(--muted); background: transparent; border: none; cursor: pointer; }
+  .signout:hover { background: rgba(0,0,0,0.05); }
+
+  .main { flex: 1; min-width: 0; padding: 24px 20px; }
+  @media (min-width: 768px) { .main { padding: 32px; } }
+  .wrap { max-width: 900px; }
+  .wrap-lg { max-width: 1080px; }
+
+  /* Hero */
+  .hero { position: relative; border-radius: 16px; overflow: hidden; border: 1px solid var(--border); margin-bottom: 24px; }
+  .hero-editable { cursor: pointer; }
+  .hero-change-badge { position: absolute; top: 10px; right: 10px; display: flex; align-items: center; gap: 5px; background: rgba(0,0,0,0.45); color: #fff; font-size: 11px; font-weight: 500; padding: 5px 10px; border-radius: 999px; backdrop-filter: blur(2px); }
+
+  /* Dashboard KPI grid */
+  .dash-grid { display: grid; grid-template-columns: 1fr; gap: 14px; margin-top: 18px; }
+  @media (min-width: 640px) { .dash-grid { grid-template-columns: repeat(2, 1fr); } }
+  @media (min-width: 1024px) { .dash-grid { grid-template-columns: repeat(3, 1fr); } }
+  .dash-card-wide { grid-column: 1 / -1; }
+  .kpi-label { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; font-weight: 500; }
+  .kpi-value { font-size: 28px; font-weight: 700; margin-top: 8px; font-family: 'Lora', Georgia, serif; color: var(--ink); line-height: 1.1; }
+  .kpi-sub { font-size: 12px; color: var(--muted); margin-top: 5px; }
+  .trend-up { color: var(--present); }
+  .trend-down { color: var(--absent); }
+  .trend-flat { color: var(--muted); }
+  .freq-row { display: flex; justify-content: space-between; gap: 8px; margin-top: 16px; }
+  .freq-item { text-align: center; flex: 1; padding: 8px 4px; border-radius: 10px; background: rgba(0,0,0,0.03); }
+  .freq-num { font-size: 19px; font-weight: 700; color: var(--ink); font-family: 'Lora', Georgia, serif; }
+  .freq-label { font-size: 10.5px; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.02em; }
+  .followup-list { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .followup-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--absent-soft); border: none; width: 100%; text-align: left; cursor: pointer; font-family: inherit; }
+  .followup-item:hover { filter: brightness(0.97); }
+  .followup-name { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+  .followup-reason { font-size: 11.5px; color: var(--absent); margin-top: 1px; }
+  .followup-ok { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 12px; border-radius: 10px; background: var(--present-soft); color: var(--present); font-size: 13px; font-weight: 500; }
+
+  /* Stories & Updates */
+  .story-grid { display: grid; grid-template-columns: 1fr; gap: 16px; margin-top: 18px; }
+  @media (min-width: 640px) { .story-grid { grid-template-columns: 1fr 1fr; } }
+  @media (min-width: 1024px) { .story-grid { grid-template-columns: repeat(3, 1fr); } }
+  .story-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; }
+  .story-img { width: 100%; height: 160px; object-fit: cover; display: block; background: var(--bg); }
+  .story-img-placeholder { display: flex; align-items: center; justify-content: center; color: var(--muted); }
+  .story-body { padding: 14px 16px; }
+  .story-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+  .story-title { font-size: 15px; font-weight: 600; color: var(--ink); }
+  .story-caption { font-size: 13px; color: var(--ink-soft); margin-top: 6px; line-height: 1.45; white-space: pre-wrap; }
+  .story-media { position: relative; }
+  .story-zone { position: absolute; top: 0; bottom: 0; border: none; background: transparent; padding: 0; margin: 0; cursor: pointer; display: flex; align-items: center; }
+  .story-zone-left { left: 0; width: 24%; justify-content: flex-start; padding-left: 8px; }
+  .story-zone-right { right: 0; width: 24%; justify-content: flex-end; padding-right: 8px; }
+  .story-zone-center { left: 24%; width: 52%; cursor: zoom-in; }
+  .zone-icon { color: #fff; background: rgba(0,0,0,0.42); border-radius: 50%; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; }
+  .story-zone-right .zone-icon svg { transform: rotate(180deg); }
+  .story-carousel-dots { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); display: flex; gap: 4px; pointer-events: none; }
+  .story-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,0.55); }
+  .story-dot.active { background: #fff; }
+  .story-carousel-count { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.5); color: #fff; font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 999px; pointer-events: none; }
+  .lightbox-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 80; display: flex; align-items: center; justify-content: center; }
+  .lightbox-img { max-width: 92vw; max-height: 88vh; object-fit: contain; border-radius: 4px; }
+  .lightbox-close { position: absolute; top: 16px; right: 16px; background: rgba(255,255,255,0.15); color: #fff; border: none; border-radius: 50%; width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .lightbox-close:hover { background: rgba(255,255,255,0.28); }
+  .lightbox-nav { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(255,255,255,0.15); color: #fff; border: none; border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+  .lightbox-nav:hover { background: rgba(255,255,255,0.28); }
+  .lightbox-prev { left: 16px; }
+  .lightbox-next { right: 16px; }
+  .lightbox-next svg { transform: rotate(180deg); }
+  .lightbox-count { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(255,255,255,0.15); color: #fff; font-size: 12px; padding: 4px 12px; border-radius: 999px; }
+  .photo-thumb-wrap { position: relative; display: inline-block; }
+  .photo-thumb-remove { position: absolute; top: -6px; right: -6px; width: 20px; height: 20px; border-radius: 50%; background: var(--absent); color: #fff; border: none; font-size: 13px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+  .hero img { width: 100%; height: 170px; object-fit: cover; display: block; }
+  @media (min-width: 640px) { .hero img { height: 210px; } }
+  .hero-overlay { position: absolute; inset: 0; background: linear-gradient(90deg, rgba(0,65,106,0.85) 0%, rgba(0,65,106,0.4) 55%, rgba(0,65,106,0.05) 100%); }
+  .hero-text { position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; padding: 20px 24px; }
+  .hero-eyebrow { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #FFD9AE; }
+  .hero-title { font-size: 21px; font-weight: 600; color: #fff; margin-top: 6px; }
+  @media (min-width: 640px) { .hero-title { font-size: 25px; } }
+  .hero-sub { font-size: 13px; color: #E4EEF3; margin-top: 6px; max-width: 420px; }
+
+  /* Cards / surfaces */
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .empty { margin-top: 24px; border: 1px dashed var(--border); border-radius: 12px; padding: 32px; text-align: center; }
+
+  /* Search */
+  .search-wrap { position: relative; max-width: 320px; margin-top: 16px; }
+  .search-wrap svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+  .search-wrap input { width: 100%; padding: 10px 12px 10px 34px; border: 1px solid var(--border); border-radius: 8px; outline: none; background: var(--surface); }
+  .search-wrap input:focus { box-shadow: 0 0 0 3px rgba(0,65,106,0.15); }
+
+  /* Group grid */
+  .group-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 18px; }
+  @media (min-width: 640px) { .group-grid { grid-template-columns: 1fr 1fr; } }
+  @media (min-width: 1024px) { .group-grid { grid-template-columns: repeat(3, 1fr); } }
+  .group-card { text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; cursor: pointer; transition: box-shadow .15s; }
+  .group-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.08); }
+  .group-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .group-name { font-size: 15px; font-weight: 600; color: var(--ink); }
+  .group-avatar { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 1px solid var(--border); }
+  .group-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .pill { font-size: 11px; font-weight: 500; border-radius: 999px; padding: 4px 9px; white-space: nowrap; }
+  .pill-accent { background: var(--accent-soft); color: var(--accent); }
+  .group-leader { font-size: 13px; color: var(--muted); margin-top: 10px; }
+
+  /* Buttons */
+  .btn { display: inline-flex; align-items: center; gap: 7px; border-radius: 8px; padding: 10px 16px; font-size: 14px; font-weight: 600; border: none; cursor: pointer; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-primary { background: var(--ink); color: #F6F7F1; }
+  .btn-primary:hover:not(:disabled) { background: #01344F; }
+  .btn-accent { background: var(--accent); color: #FFFDF8; }
+  .btn-accent:hover:not(:disabled) { background: #E5650D; }
+  .btn-ghost { background: var(--surface); border: 1px solid var(--border); color: var(--ink); }
+  .btn-ghost:hover:not(:disabled) { background: rgba(0,0,0,0.04); }
+  .btn-text { background: none; border: none; color: var(--muted); font-size: 13px; font-weight: 500; cursor: pointer; padding: 4px; }
+  .btn-text:hover { color: var(--ink); }
+  .btn-sm { padding: 6px 10px; font-size: 12.5px; border-radius: 7px; }
+
+  /* Forms */
+  .field { margin-bottom: 0; }
+  .field label { display: block; font-size: 12px; font-weight: 600; color: var(--ink); margin-bottom: 6px; }
+  .field input[type=text], .field input[type=password], .field select, .field textarea, .field input[type=date] {
+    width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; outline: none; background: #fff;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus { box-shadow: 0 0 0 3px rgba(0,65,106,0.15); }
+  .field-hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .field-error { font-size: 11px; color: var(--absent); margin-top: 4px; display: flex; align-items: center; gap: 4px; }
+  .form-grid { display: grid; grid-template-columns: 1fr; gap: 14px; margin-top: 16px; }
+  @media (min-width: 640px) { .form-grid { grid-template-columns: 1fr 1fr; } }
+  .col-span-2 { grid-column: 1 / -1; }
+  .uppercase-input { text-transform: uppercase; }
+
+  /* Group list rows (admin) */
+  .group-row { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .group-row-name { font-weight: 600; font-size: 14px; color: var(--ink); }
+  .group-row-meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .row-actions { display: flex; align-items: center; gap: 6px; }
+
+  /* Attendance */
+  .att-header { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .att-meta { font-size: 13px; color: var(--muted); margin-top: 6px; display: flex; flex-wrap: wrap; gap: 14px; }
+  .date-picker { display: flex; align-items: center; gap: 8px; }
+  .date-picker input { border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; outline: none; }
+  .chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; font-size: 12px; font-weight: 500; }
+  .chip { border-radius: 999px; padding: 5px 11px; }
+  .chip-present { background: var(--present-soft); color: var(--present); }
+  .chip-absent { background: var(--absent-soft); color: var(--absent); }
+  .chip-excused { background: var(--excused-soft); color: var(--excused); }
+  .chip-neutral { background: rgba(0,0,0,0.05); color: var(--muted); }
+  .chip-guest { background: var(--accent-soft); color: var(--accent); }
+  .member-list { margin-top: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+  .member-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .member-row:last-child { border-bottom: none; }
+  .member-name { font-size: 14px; font-weight: 500; color: var(--ink); }
+  .leader-badge { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 2px 7px; margin-left: 7px; vertical-align: middle; }
+  .status-group { display: flex; gap: 6px; }
+  .status-btn { border: 1px solid var(--border); background: #fff; color: var(--ink-soft); border-radius: 7px; padding: 6px 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
+  .status-btn.active-present { background: var(--present); border-color: var(--present); color: #fff; }
+  .status-btn.active-absent { background: var(--absent); border-color: var(--absent); color: #fff; }
+  .status-btn.active-excused { background: var(--excused); border-color: var(--excused); color: #fff; }
+
+  /* Reports */
+  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 18px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { padding: 9px 14px; font-size: 13.5px; font-weight: 500; border: none; background: #fff; color: var(--ink); cursor: pointer; }
+  .seg button.active { background: var(--ink); color: #F6F7F1; }
+  .controls select, .controls input[type=week], .controls input[type=month] { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: #fff; outline: none; }
+  .range-label { font-size: 12px; color: var(--muted); margin-left: auto; }
+  .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
+  @media (min-width: 640px) { .summary-grid { grid-template-columns: repeat(4, 1fr); } }
+  .summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+  .summary-label { font-size: 11.5px; color: var(--muted); }
+  .summary-value { font-size: 22px; font-weight: 600; margin-top: 4px; }
+  .chart-card { margin-top: 18px; }
+  .chart-title { display: flex; align-items: center; gap: 8px; font-size: 13.5px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+  .chart { display: flex; align-items: flex-end; gap: 8px; height: 160px; overflow-x: auto; padding-bottom: 4px; margin-top: 8px; }
+  .bar-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; flex-shrink: 0; width: 26px; }
+  .bar-stack { width: 100%; border-radius: 3px 3px 0 0; overflow: hidden; display: flex; flex-direction: column; }
+  .bar-date { font-size: 9px; color: var(--muted); margin-top: 4px; }
+  .report-canvas { width: 100%; height: auto; display: block; margin-top: 8px; }
+  .table-card { margin-top: 18px; overflow: hidden; }
+  .table-head { padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  .table-head-title { display: flex; align-items: center; gap: 8px; }
+  .table-head h2 { font-size: 13.5px; font-weight: 600; color: var(--ink); font-family: inherit; }
+  .table-search { position: relative; width: 190px; max-width: 100%; }
+  .table-search svg { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--muted); }
+  .table-search input { width: 100%; padding: 6px 10px 6px 28px; border: 1px solid var(--border); border-radius: 7px; outline: none; font-size: 12.5px; }
+  .no-rows-msg { padding: 16px; text-align: center; font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  th { text-align: left; font-size: 11.5px; font-weight: 500; color: var(--muted); border-bottom: 1px solid var(--border); padding: 8px 12px; }
+  th.sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+  th.sortable:hover { color: var(--ink); }
+  th.sort-active { color: var(--ink); font-weight: 700; }
+  td { padding: 9px 12px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  .text-center { text-align: center; }
+  .table-scroll { overflow-x: auto; }
+
+  /* Modal / toast */
+  .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 60; }
+  .modal { width: 100%; max-width: 360px; background: var(--surface); border-radius: 16px; padding: 22px; box-shadow: 0 10px 40px rgba(0,0,0,0.25); }
+  .modal-title { display: flex; align-items: center; gap: 8px; color: var(--ink); margin-bottom: 4px; }
+  .modal-title h2 { font-size: 17px; font-weight: 600; }
+  .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--ink); color: #F6F7F1; padding: 10px 18px; border-radius: 999px; font-size: 13.5px; font-weight: 500; box-shadow: 0 6px 20px rgba(0,0,0,0.2); z-index: 70; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ------------------------------------------------------
+     Constants
+  ------------------------------------------------------ */
+  var SCHEDULE_OPTIONS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday', 'Flexible'];
+  var ADMIN_PIN = '2026';
+  var GROUPS_KEY = 'efad-groups-v1';
+  var ATTENDANCE_KEY = 'efad-attendance-v1';
+  var ADMINS_KEY = 'efad-admins-v1';
+  var HERO_IMAGE_KEY = 'efad-hero-image-v1';
+  var STORIES_KEY = 'efad-stories-v1';
+  var FAMILY_IMAGE_URL = 'https://across.ccf.org.ph/wp-content/uploads/2024/09/portrait-of-a-family-on-vacation-2023-11-27-05-03-31-utc-Medium-1024x683.jpg';
+  var STATUS = { present: 'Present', absent: 'Absent', excused: 'Excused' };
+
+  /* ------------------------------------------------------
+     Helpers
+  ------------------------------------------------------ */
+  function esc(str) {
+    return String(str == null ? '' : str).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+  function todayISO() { var d = new Date(); var tz = d.getTimezoneOffset() * 60000; return new Date(d - tz).toISOString().slice(0, 10); }
+  function formatDateLabel(iso) { var d = new Date(iso + 'T00:00:00'); return d.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }); }
+  function parseMembers(text) { return text.split('\n').map(function (s) { return s.trim(); }).filter(Boolean); }
+  function getRoster(g) {
+    return g.leader ? [{ name: g.leader, isLeader: true }] : [];
+  }
+  function compareValues(av, bv) {
+    if (av === null || av === undefined) av = '';
+    if (bv === null || bv === undefined) bv = '';
+    if (typeof av === 'boolean') av = av ? 1 : 0;
+    if (typeof bv === 'boolean') bv = bv ? 1 : 0;
+    if (typeof av === 'string') av = av.toLowerCase();
+    if (typeof bv === 'string') bv = bv.toLowerCase();
+    if (av < bv) return -1;
+    if (av > bv) return 1;
+    return 0;
+  }
+  function sortRows(rows, key, dir, tieKey) {
+    var copy = rows.slice();
+    copy.sort(function (a, b) {
+      var c = compareValues(a[key], b[key]);
+      if (c === 0 && tieKey) c = compareValues(a[tieKey], b[tieKey]);
+      return dir === 'desc' ? -c : c;
+    });
+    return copy;
+  }
+  function sortHeader(label, key, sort, action, centered) {
+    var active = sort.key === key;
+    var arrow = active ? (sort.dir === 'asc' ? ' \u25B2' : ' \u25BC') : '';
+    return '<th class="sortable' + (centered ? ' text-center' : '') + (active ? ' sort-active' : '') + '" data-action="' + action + '" data-key="' + key + '">' + esc(label) + arrow + '</th>';
+  }
+  function pad2(n) { return String(n).padStart(2, '0'); }
+  function toISO(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+
+  function isoWeekOf(dateObj) {
+    var d = new Date(Date.UTC(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate()));
+    var dayNum = d.getUTCDay() || 7;
+    d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+    var yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    var weekNo = Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    return d.getUTCFullYear() + '-W' + pad2(weekNo);
+  }
+  function defaultWeekValue() { return isoWeekOf(new Date()); }
+  function defaultMonthValue() { var d = new Date(); return d.getFullYear() + '-' + pad2(d.getMonth() + 1); }
+  function defaultYearValue() { return String(new Date().getFullYear()); }
+
+  function weekRange(weekStr) {
+    var parts = weekStr.split('-W'); var yy = Number(parts[0]); var ww = Number(parts[1]);
+    var jan4 = new Date(yy, 0, 4);
+    var jan4Day = jan4.getDay() || 7;
+    var monday = new Date(jan4);
+    monday.setDate(jan4.getDate() - jan4Day + 1 + (ww - 1) * 7);
+    var sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    return { start: toISO(monday), end: toISO(sunday), label: 'Week ' + ww + ', ' + yy + ' (' + monday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' \u2013 ' + sunday.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ')' };
+  }
+  function monthRange(monthStr) {
+    var parts = monthStr.split('-'); var yy = Number(parts[0]); var mm = Number(parts[1]);
+    var first = new Date(yy, mm - 1, 1);
+    var last = new Date(yy, mm, 0);
+    return { start: toISO(first), end: toISO(last), label: first.toLocaleDateString(undefined, { month: 'long', year: 'numeric' }) };
+  }
+  function yearRangeFn(yearStr) {
+    var yy = Number(yearStr);
+    return { start: yy + '-01-01', end: yy + '-12-31', label: String(yy) };
+  }
+
+  function loadLocal(key, fallback) {
+    try { var raw = window.localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; }
+    catch (e) { return fallback; }
+  }
+  function saveLocal(key, value) {
+    try { window.localStorage.setItem(key, JSON.stringify(value)); return true; }
+    catch (e) { return false; }
+  }
+
+  /* ------------------------------------------------------
+     Icons (inline SVG strings)
+  ------------------------------------------------------ */
+  function icon(name, size) {
+    size = size || 16;
+    var common = 'width="' + size + '" height="' + size + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+    var paths = {
+      grid: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+      shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/>',
+      plus: '<path d="M12 5v14M5 12h14"/>',
+      trash: '<path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/>',
+      pencil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/>',
+      back: '<path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/>',
+      search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
+      clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+      users: '<path d="M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+      calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+      logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
+      save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/>',
+      warn: '<path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/>',
+      bar: '<path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6"/><rect x="12" y="8" width="3" height="10"/><rect x="17" y="5" width="3" height="13"/>',
+      trend: '<path d="M3 17l6-6 4 4 8-8"/><path d="M17 7h4v4"/>',
+      download: '<path d="M12 3v12"/><path d="M7 10l5 5 5-5"/><path d="M5 21h14"/>',
+      camera: '<path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>',
+      key: '<circle cx="8" cy="15" r="4"/><path d="M10.5 12.5L20 3M20 3v5M20 3h-5"/>',
+      eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+      checkCircle: '<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.5 2.5L16 9"/>',
+      flag: '<path d="M4 22V4"/><path d="M4 4h13l-2.5 4L17 12H4"/>',
+      pulse: '<path d="M22 12h-4l-3 8L9 4l-3 8H2"/>',
+      newspaper: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 8h10M7 12h10M7 16h6"/>',
+      image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>',
+      close: '<path d="M18 6L6 18M6 6l12 12"/>'
+    };
+    return '<svg ' + common + '>' + (paths[name] || '') + '</svg>';
+  }
+
+  /* ------------------------------------------------------
+     State
+  ------------------------------------------------------ */
+  var seededAdmins = loadLocal(ADMINS_KEY, null);
+  if (!seededAdmins || !Array.isArray(seededAdmins) || seededAdmins.length === 0) {
+    seededAdmins = [{ id: uid(), name: 'Administrator', pin: ADMIN_PIN }];
+    saveLocal(ADMINS_KEY, seededAdmins);
+  }
+
+  var state = {
+    view: 'dashboard',
+    groups: loadLocal(GROUPS_KEY, []).map(function (g) {
+      if (typeof g.familyMemberCount !== 'number') {
+        g.familyMemberCount = Array.isArray(g.members) ? g.members.length : 0;
+      }
+      if (!Array.isArray(g.members)) g.members = [];
+      return g;
+    }),
+    attendance: loadLocal(ATTENDANCE_KEY, {}),
+    admins: seededAdmins,
+    heroImage: loadLocal(HERO_IMAGE_KEY, null),
+    isAdmin: false,
+    currentAdminId: null,
+    loginOpen: false,
+    pinError: '',
+    toast: null,
+    dash: { selectedId: null },
+    att: { groupId: null, date: todayISO(), records: {}, dirty: false },
+    admin: { editId: null, errors: {}, confirmDeleteId: null, photoData: null },
+    adminUsers: { editId: null, errors: {}, confirmDeleteId: null, revealId: null },
+    stories: loadLocal(STORIES_KEY, []).map(function (s) {
+      if (!Array.isArray(s.images)) s.images = s.image ? [s.image] : [];
+      return s;
+    }),
+    storyAdmin: { editId: null, errors: {}, confirmDeleteId: null, images: [], draft: null },
+    groupDetailId: null,
+    lightbox: null,
+    rep: { period: 'weekly', week: defaultWeekValue(), month: defaultMonthValue(), year: defaultYearValue(), groupFilter: 'all', groupSort: { key: 'name', dir: 'asc' }, memberSort: { key: 'group', dir: 'asc' }, topN: '5' }
+  };
+  var toastTimer = null;
+  var storyCarouselIndex = {};
+  var storySlideshowTimer = null;
+  var lastReportData = null;
+
+  function flash(msg) {
+    state.toast = msg;
+    render();
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { state.toast = null; render(); }, 2200);
+  }
+  function persistGroups(next) {
+    state.groups = next;
+    if (!saveLocal(GROUPS_KEY, next)) flash('Could not save to this device');
+  }
+  function persistAttendance(next) {
+    state.attendance = next;
+    if (!saveLocal(ATTENDANCE_KEY, next)) flash('Could not save to this device');
+  }
+  function persistAdmins(next) {
+    state.admins = next;
+    if (!saveLocal(ADMINS_KEY, next)) flash('Could not save to this device');
+  }
+  function persistHeroImage(dataUrl) {
+    state.heroImage = dataUrl;
+    if (dataUrl === null) { try { window.localStorage.removeItem(HERO_IMAGE_KEY); } catch (e) {} return; }
+    if (!saveLocal(HERO_IMAGE_KEY, dataUrl)) flash('Could not save photo \u2014 it may be too large for this browser');
+  }
+  function persistStories(next) {
+    state.stories = next;
+    if (!saveLocal(STORIES_KEY, next)) flash('Could not save to this device');
+  }
+
+  /* ------------------------------------------------------
+     Small view helpers
+  ------------------------------------------------------ */
+  function emptyState(title, body) {
+    return '<div class="empty">' + icon('users', 26) + '<div class="serif" style="font-weight:600;color:var(--ink);margin-top:10px">' + esc(title) + '</div>' +
+      '<p class="muted" style="font-size:13px;margin-top:4px">' + esc(body) + '</p></div>';
+  }
+  function field(label, inner, opts) {
+    opts = opts || {};
+    var out = '<div class="field' + (opts.full ? ' col-span-2' : '') + '"><label>' + esc(label) + '</label>' + inner;
+    if (opts.error) out += '<div class="field-error">' + icon('warn', 11) + ' ' + esc(opts.error) + '</div>';
+    else if (opts.hintHtml) out += '<div class="field-hint">' + opts.hintHtml + '</div>';
+    else if (opts.hint) out += '<div class="field-hint">' + esc(opts.hint) + '</div>';
+    out += '</div>';
+    return out;
+  }
+
+  /* ------------------------------------------------------
+     Side nav
+  ------------------------------------------------------ */
+  function sideNav() {
+    var v = state.view;
+    return '' +
+      '<nav class="sidebar">' +
+      '<div class="brand"><span class="ink">' + markSvg() + '</span><div><div class="brand-name">EFAD</div><div class="brand-sub">Every Family A Discipleship Group</div></div></div>' +
+      '<div class="navlinks">' +
+      '<button class="navlink' + (v === 'dashboard' ? ' active' : '') + '" data-action="nav" data-view="dashboard">' + icon('grid', 17) + ' Dashboard</button>' +
+      '<button class="navlink' + (v === 'reports' ? ' active' : '') + '" data-action="nav" data-view="reports">' + icon('bar', 17) + ' Reports</button>' +
+      '<button class="navlink' + (v === 'stories' ? ' active' : '') + '" data-action="nav" data-view="stories">' + icon('newspaper', 17) + ' Stories</button>' +
+      '<button class="navlink' + (v === 'admin' ? ' active' : '') + '" data-action="nav" data-view="admin">' + icon('shield', 17) + ' Admin Maintenance</button>' +
+      '</div>' +
+      '<div class="signout-wrap' + (state.isAdmin ? ' show' : '') + '"><button class="signout" data-action="logout">' + icon('logout', 16) + ' Sign out of Admin</button></div>' +
+      '</nav>';
+  }
+  function markSvg() {
+    return '<svg width="30" height="30" viewBox="0 0 40 40" fill="none">' +
+      '<circle cx="20" cy="14" r="7" fill="#F5F7F8" stroke="currentColor" stroke-width="2"/>' +
+      '<circle cx="11" cy="27" r="6" fill="#F5F7F8" stroke="currentColor" stroke-width="2"/>' +
+      '<circle cx="29" cy="27" r="6" fill="#F5F7F8" stroke="currentColor" stroke-width="2"/>' +
+      '<path d="M20 21V24M14.5 24L17 22.5M25.5 24L23 22.5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>';
+  }
+
+  /* ------------------------------------------------------
+     Dashboard + Attendance
+  ------------------------------------------------------ */
+  function computeDashboardStats() {
+    var groups = state.groups;
+    var now = new Date();
+    var todayStr = todayISO();
+
+    var totalParticipants = groups.reduce(function (s, g) { return s + (g.leader ? 1 : 0) + (g.familyMemberCount || 0); }, 0);
+
+    var entries = Object.keys(state.attendance).map(function (k) {
+      var parts = k.split('__');
+      return { groupId: parts[0], date: parts[1], records: state.attendance[k] };
+    });
+
+    function inRange(d, r) { return d >= r.start && d <= r.end; }
+
+    var thisWeekRange = weekRange(isoWeekOf(now));
+    var thisMonthRange = monthRange(defaultMonthValue());
+    var thisYearRange = yearRangeFn(defaultYearValue());
+    var last30Start = new Date(now); last30Start.setDate(last30Start.getDate() - 29);
+    var last30Range = { start: toISO(last30Start), end: todayStr };
+
+    function countSessions(range, groupId) {
+      var set = {};
+      entries.forEach(function (e) {
+        if ((groupId && e.groupId !== groupId) || !inRange(e.date, range)) return;
+        set[e.groupId + '__' + e.date] = true;
+      });
+      return Object.keys(set).length;
+    }
+    var sessionsThisWeek = countSessions(thisWeekRange);
+    var sessionsThisMonth = countSessions(thisMonthRange);
+    var sessionsThisYear = countSessions(thisYearRange);
+
+    var groupsMetThisWeekSet = {};
+    entries.forEach(function (e) { if (inRange(e.date, thisWeekRange)) groupsMetThisWeekSet[e.groupId] = true; });
+    var groupsMetThisWeek = Object.keys(groupsMetThisWeekSet).length;
+
+    var activeGroupIds = {};
+    entries.forEach(function (e) { if (inRange(e.date, last30Range)) activeGroupIds[e.groupId] = true; });
+    var activeDgroupsCount = Object.keys(activeGroupIds).length;
+
+    var leaderCount = groups.filter(function (g) { return g.leader && g.leader.trim() !== ''; }).length;
+
+    function periodStats(range, groupId) {
+      var present = 0, marked = 0;
+      entries.forEach(function (e) {
+        if ((groupId && e.groupId !== groupId) || !inRange(e.date, range)) return;
+        Object.keys(e.records).forEach(function (k) {
+          if (k === '__familyPresent') { present += e.records[k]; marked += e.records[k]; }
+          else if (k === '__familyAbsent' || k === '__familyExcused') { marked += e.records[k]; }
+          else {
+            var v = e.records[k];
+            if (v === 'present') { present++; marked++; }
+            else if (v === 'absent' || v === 'excused') { marked++; }
+          }
+        });
+      });
+      return { present: present, marked: marked, rate: marked > 0 ? Math.round((present / marked) * 100) : null };
+    }
+
+    var last14Start = new Date(now); last14Start.setDate(last14Start.getDate() - 13);
+    var last14Range = { start: toISO(last14Start), end: todayStr };
+    var lastMetByGroup = {};
+    entries.forEach(function (e) {
+      if (!lastMetByGroup[e.groupId] || e.date > lastMetByGroup[e.groupId]) lastMetByGroup[e.groupId] = e.date;
+    });
+    var followUps = [];
+    groups.forEach(function (g) {
+      var lastMet = lastMetByGroup[g.id];
+      var daysSince = lastMet ? Math.floor((now - new Date(lastMet + 'T00:00:00')) / 86400000) : null;
+      var noRecent = !lastMet || daysSince > 13;
+      var s30 = periodStats(last30Range, g.id);
+      var lowRate = s30.marked > 0 && s30.rate < 50;
+      if (noRecent || lowRate) {
+        var reason = lastMet ? (noRecent ? ('No session in ' + daysSince + ' days') : ('Attendance rate ' + s30.rate + '% in the last 30 days'))
+          : 'No attendance recorded yet';
+        followUps.push({ id: g.id, name: g.name, reason: reason });
+      }
+    });
+
+    return {
+      totalGroups: groups.length, activeDgroupsCount: activeDgroupsCount, totalParticipants: totalParticipants,
+      leaderCount: leaderCount, groupsMetThisWeek: groupsMetThisWeek, sessionsThisWeek: sessionsThisWeek,
+      sessionsThisMonth: sessionsThisMonth, sessionsThisYear: sessionsThisYear, followUps: followUps
+    };
+  }
+
+  function dashboardStatsSection(stats) {
+    var followUpHtml;
+    if (stats.followUps.length === 0) {
+      followUpHtml = '<div class="followup-ok">' + icon('checkCircle', 16) + ' All Dgroups have met recently and are attending well.</div>';
+    } else {
+      followUpHtml = '<div class="followup-list">' + stats.followUps.map(function (f) {
+        return '<button class="followup-item" data-action="select-group" data-id="' + esc(f.id) + '">' +
+          '<span><span class="followup-name">' + esc(f.name) + '</span><br/><span class="followup-reason">' + esc(f.reason) + '</span></span>' +
+          icon('back', 14) + '</button>';
+      }).join('') + '</div>';
+    }
+
+    return '<div class="dash-grid">' +
+      '<div class="card"><div class="kpi-label">' + icon('shield', 14) + ' Active Dgroups</div>' +
+      '<div class="kpi-value">' + stats.activeDgroupsCount + ' <span style="font-size:16px;color:var(--muted);font-weight:500">/ ' + stats.totalGroups + '</span></div>' +
+      '<div class="kpi-sub">Met at least once in the last 30 days</div></div>' +
+
+      '<div class="card"><div class="kpi-label">' + icon('users', 14) + ' Total Participants</div>' +
+      '<div class="kpi-value">' + stats.totalParticipants + '</div>' +
+      '<div class="kpi-sub">Leaders + family members, across all Dgroups</div></div>' +
+
+      '<div class="card"><div class="kpi-label">' + icon('shield', 14) + ' Number of Dgroup Leaders</div>' +
+      '<div class="kpi-value">' + stats.leaderCount + '</div>' +
+      '<div class="kpi-sub">Leaders currently assigned across all Dgroups</div></div>' +
+
+      '<div class="card"><div class="kpi-label">' + icon('calendar', 14) + ' Met This Week</div>' +
+      '<div class="kpi-value">' + stats.groupsMetThisWeek + ' <span style="font-size:16px;color:var(--muted);font-weight:500">/ ' + stats.totalGroups + '</span></div>' +
+      '<div class="kpi-sub">Dgroups with a recorded session this week</div></div>' +
+
+      '<div class="card"><div class="kpi-label">' + icon('bar', 14) + ' Meetings Frequency</div>' +
+      '<div class="freq-row">' +
+      '<div class="freq-item"><div class="freq-num">' + stats.sessionsThisWeek + '</div><div class="freq-label">This Week</div></div>' +
+      '<div class="freq-item"><div class="freq-num">' + stats.sessionsThisMonth + '</div><div class="freq-label">This Month</div></div>' +
+      '<div class="freq-item"><div class="freq-num">' + stats.sessionsThisYear + '</div><div class="freq-label">This Year</div></div>' +
+      '</div></div>' +
+
+      '<div class="card dash-card-wide"><div class="kpi-label">' + icon('flag', 14) + ' Needs Follow-up</div>' +
+      followUpHtml + '</div>' +
+      '</div>';
+  }
+
+  function dashboardView() {
+    if (state.dash.selectedId) {
+      var g = state.groups.filter(function (x) { return x.id === state.dash.selectedId; })[0];
+      if (g) return attendancePanelView(g);
+      state.dash.selectedId = null;
+    }
+    var heroSrc = state.heroImage || FAMILY_IMAGE_URL;
+    var canEditHero = state.isAdmin;
+    var hero = '<div class="hero' + (canEditHero ? ' hero-editable' : '') + '"' + (canEditHero ? ' data-action="change-hero-image" title="Tap to change this photo"' : '') + '>' +
+      '<img src="' + heroSrc + '" alt="A family together \u2014 CCF Across Family Ministry" loading="lazy"/>' +
+      '<div class="hero-overlay"></div><div class="hero-text">' +
+      '<span class="hero-eyebrow">CCF Across Family Ministry</span>' +
+      '<h1 class="hero-title">Every Family A Discipleship Group</h1>' +
+      '<p class="hero-sub">Helping every family build a rhythm of discipleship, together.</p></div>' +
+      (canEditHero ? '<span class="hero-change-badge">' + icon('camera', 13) + ' Tap to change photo</span>' : '') +
+      (canEditHero ? '<input type="file" id="hero-image-file" accept="image/*" style="display:none"/>' : '') +
+      '</div>' +
+      (canEditHero && state.heroImage ? '<div style="text-align:right;margin:-14px 0 14px"><button class="btn-text" data-action="reset-hero-image">Use default photo</button></div>' : '');
+
+    var groups = state.groups.slice().sort(function (a, b) { return a.name.localeCompare(b.name); });
+    var body;
+    if (groups.length === 0) {
+      body = emptyState('No Dgroups yet', 'Go to Admin Maintenance Menu to add discipleship groups.');
+    } else {
+      body = '<div class="group-grid" id="group-grid">' + groups.map(groupCard).join('') + '</div>' +
+        '<div class="empty hidden" id="no-match-msg">' +
+        '<p class="muted" style="font-size:13px">No matches. Try a different search term.</p></div>';
+    }
+
+    var stats = computeDashboardStats();
+
+    return '<div class="wrap-lg">' + hero +
+      '<h2 class="serif" style="font-size:20px;font-weight:600;color:var(--ink)">Ministry Overview</h2>' +
+      '<p class="muted" style="font-size:13.5px;margin-top:4px">Where EFAD stands right now, across all Dgroups.</p>' +
+      dashboardStatsSection(stats) +
+      '<h2 class="serif" style="font-size:20px;font-weight:600;color:var(--ink);margin-top:32px">Discipleship Groups</h2>' +
+      '<p class="muted" style="font-size:13.5px;margin-top:4px">Select a group to record attendance for a specific date.</p>' +
+      (groups.length > 0 ? '<div class="search-wrap">' + icon('search', 16) + '<input type="text" id="dash-search" placeholder="Search by group or leader" autocomplete="off"/></div>' : '') +
+      body + '</div>';
+  }
+
+  function groupCard(g) {
+    return '<button class="group-card" data-action="select-group" data-id="' + esc(g.id) + '" data-search="' + esc((g.name + ' ' + g.leader).toLowerCase()) + '">' +
+      '<div class="group-card-top">' +
+      (g.photo ? '<img src="' + g.photo + '" class="group-avatar"/>' : '') +
+      '<div style="flex:1;min-width:0"><div class="group-name">' + esc(g.name) + '</div>' +
+      '<div class="group-meta">EFAD \u00b7 ' + esc(g.schedule) + '</div></div>' +
+      '<span class="pill pill-accent">' + g.familyMemberCount + ' member' + (g.familyMemberCount === 1 ? '' : 's') + '</span></div>' +
+      '<div class="group-leader">Leader: <strong class="ink">' + esc(g.leader) + '</strong></div></button>';
+  }
+
+  /* ------------------------------------------------------
+     Stories & Updates
+  ------------------------------------------------------ */
+  function storiesView() {
+    var stories = state.stories.slice().sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
+    var body;
+    if (stories.length === 0) {
+      body = emptyState('No stories yet', 'Add one from Admin Maintenance \u2014 Stories & Updates.');
+    } else {
+      body = '<div class="story-grid" id="story-grid">' + stories.map(storyCard).join('') + '</div>' +
+        '<div class="empty hidden" id="story-no-match"><p class="muted" style="font-size:13px">No matches. Try a different search term.</p></div>';
+    }
+    return '<div class="wrap-lg">' +
+      '<h1 class="serif" style="font-size:24px;font-weight:600;color:var(--ink)">Stories & Updates</h1>' +
+      '<p class="muted" style="font-size:13.5px;margin-top:4px">What\u2019s happening across Family Dgroups and the Across Ministry.</p>' +
+      (stories.length > 0 ? '<div class="search-wrap">' + icon('search', 16) + '<input type="text" id="story-search" placeholder="Search stories" autocomplete="off"/></div>' : '') +
+      body + '</div>';
+  }
+
+  function storyCard(s) {
+    var groupName = s.groupId ? ((state.groups.filter(function (g) { return g.id === s.groupId; })[0] || {}).name) : null;
+    var catLabel = s.category === 'ministry' ? 'Across Ministry' : 'Family Dgroup';
+    var images = s.images || [];
+    var idx = storyCarouselIndex[s.id] || 0;
+    if (idx >= images.length) idx = 0;
+
+    var media;
+    if (images.length === 0) {
+      media = '<div class="story-img story-img-placeholder">' + icon('image', 28) + '</div>';
+    } else if (images.length === 1) {
+      media = '<div class="story-media"><img src="' + images[0] + '" class="story-img" alt="' + esc(s.title) + '" loading="lazy"/>' +
+        '<button class="story-zone story-zone-center" data-action="open-lightbox" data-id="' + esc(s.id) + '" data-idx="0" aria-label="View full size"></button></div>';
+    } else {
+      media = '<div class="story-media">' +
+        '<img src="' + images[idx] + '" class="story-img" alt="' + esc(s.title) + '" loading="lazy"/>' +
+        '<button class="story-zone story-zone-left" data-action="story-carousel-prev" data-id="' + esc(s.id) + '" aria-label="Previous photo"><span class="zone-icon">' + icon('back', 14) + '</span></button>' +
+        '<button class="story-zone story-zone-center" data-action="open-lightbox" data-id="' + esc(s.id) + '" data-idx="' + idx + '" aria-label="View full size"></button>' +
+        '<button class="story-zone story-zone-right" data-action="story-carousel-next" data-id="' + esc(s.id) + '" aria-label="Next photo"><span class="zone-icon">' + icon('back', 14) + '</span></button>' +
+        '<div class="story-carousel-dots">' + images.map(function (_, i) { return '<span class="story-dot' + (i === idx ? ' active' : '') + '"></span>'; }).join('') + '</div>' +
+        '<span class="story-carousel-count">' + (idx + 1) + ' / ' + images.length + '</span>' +
+        '</div>';
+    }
+
+    return '<div class="story-card" data-search="' + esc((s.title + ' ' + s.caption + ' ' + (groupName || '')).toLowerCase()) + '">' +
+      media +
+      '<div class="story-body">' +
+      '<div class="story-meta"><span class="pill pill-accent">' + esc(catLabel) + '</span>' +
+      (groupName ? '<span class="muted" style="font-size:11.5px">' + esc(groupName) + '</span>' : '') +
+      '<span class="muted" style="font-size:11px;margin-left:auto">' + esc(formatDateLabel(s.date)) + '</span></div>' +
+      '<h3 class="serif story-title">' + esc(s.title) + '</h3>' +
+      '<p class="story-caption">' + esc(s.caption) + '</p>' +
+      '</div></div>';
+  }
+
+  function attendancePanelView(g) {
+    if (state.att.groupId !== g.id) {
+      state.att.groupId = g.id;
+      state.att.date = todayISO();
+      state.att.records = state.attendance[g.id + '__' + state.att.date] || {};
+      state.att.dirty = false;
+    }
+    var roster = getRoster(g);
+    var records = state.att.records;
+    var famTotal = g.familyMemberCount || 0;
+    var fam = { present: records.__familyPresent || 0, absent: records.__familyAbsent || 0, excused: records.__familyExcused || 0, guest: records.__familyGuest || 0 };
+    var famUnmarked = Math.max(0, famTotal - (fam.present + fam.absent + fam.excused));
+
+    var counts = { present: 0, absent: 0, excused: 0, guest: 0 };
+    roster.forEach(function (person) { if (counts[records[person.name]] !== undefined) counts[records[person.name]]++; });
+    counts.present += fam.present; counts.absent += fam.absent; counts.excused += fam.excused; counts.guest += fam.guest;
+    var leaderUnmarked = roster.filter(function (person) { return !records[person.name]; }).length;
+    var unmarked = leaderUnmarked + famUnmarked;
+
+    var rows;
+    if (roster.length === 0) {
+      rows = '<div style="padding:24px;text-align:center;font-size:13.5px" class="muted">This group has no leader yet. Add one from the Admin Maintenance Menu.</div>';
+    } else {
+      rows = roster.map(function (person, idx) {
+        var st = records[person.name];
+        var btns = Object.keys(STATUS).map(function (key) {
+          return '<button class="status-btn' + (st === key ? ' active-' + key : '') + '" data-action="set-status" data-idx="' + idx + '" data-status="' + key + '" title="' + STATUS[key] + '">' + STATUS[key][0] + '</button>';
+        }).join('');
+        return '<div class="member-row"><span class="member-name">' + esc(person.name) + (person.isLeader ? '<span class="leader-badge">Leader</span>' : '') + '</span><div class="status-group">' + btns + '</div></div>';
+      }).join('');
+    }
+
+    var familyCard = famTotal > 0
+      ? '<div class="card" style="margin-top:14px" id="family-tally-wrap" data-total="' + famTotal + '">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">' +
+        '<h3 style="font-size:14.5px;font-weight:600;color:var(--ink);margin:0">Family Members</h3>' +
+        '<span class="muted" style="font-size:12.5px">Total: ' + famTotal + '</span></div>' +
+        '<p class="muted" style="font-size:12.5px;margin-top:4px">Enter headcounts \u2014 no need to list individual names.</p>' +
+        '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">' +
+        '<div class="field" style="width:100px"><label>Present</label><input type="number" id="family-present" min="0" step="1" value="' + fam.present + '"/></div>' +
+        '<div class="field" style="width:100px"><label>Absent</label><input type="number" id="family-absent" min="0" step="1" value="' + fam.absent + '"/></div>' +
+        '<div class="field" style="width:100px"><label>Excused</label><input type="number" id="family-excused" min="0" step="1" value="' + fam.excused + '"/></div>' +
+        '<div class="field" style="width:100px"><label>Guests</label><input type="number" id="family-guest" min="0" step="1" value="' + fam.guest + '"/></div>' +
+        '</div>' +
+        '<p class="muted" style="font-size:12.5px;margin-top:10px">Unmarked: <span id="family-unmarked-live">' + famUnmarked + '</span> of ' + famTotal + '\u00a0\u00a0\u00b7\u00a0\u00a0Guests are visitors, not counted against the family total</p>' +
+        '</div>'
+      : '<div class="card" style="margin-top:14px"><p class="muted" style="font-size:13px">No family member count set for this Dgroup yet. Add one from the Admin Maintenance Menu.</p></div>';
+
+    return '<div class="wrap">' +
+      '<button class="btn-text" data-action="back-to-groups" style="display:flex;align-items:center;gap:6px;margin-bottom:14px">' + icon('back', 15) + ' Back to groups</button>' +
+      '<div class="card">' +
+      '<div class="att-header"><div><h1 class="serif" style="font-size:20px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:8px">' + (g.photo ? '<img src="' + g.photo + '" class="group-avatar"/>' : '') + esc(g.name) + '</h1>' +
+      '<div class="att-meta"><span style="display:flex;align-items:center;gap:5px">' + icon('clock', 13) + esc(g.schedule) + '</span>' +
+      '<span>Leader: <strong class="ink">' + esc(g.leader) + '</strong></span></div></div>' +
+      '<div class="date-picker">' + icon('calendar', 15) + '<input type="date" id="att-date" value="' + state.att.date + '"/></div></div>' +
+      '<p class="muted" style="font-size:12px;margin-top:10px">' + esc(formatDateLabel(state.att.date)) + '</p>' +
+      '<div class="chip-row">' +
+      '<span class="chip chip-present">Present ' + counts.present + '</span>' +
+      '<span class="chip chip-absent">Absent ' + counts.absent + '</span>' +
+      '<span class="chip chip-excused">Excused ' + counts.excused + '</span>' +
+      '<span class="chip chip-guest">Guests ' + counts.guest + '</span>' +
+      '<span class="chip chip-neutral">Unmarked ' + unmarked + '</span></div></div>' +
+      '<div class="member-list">' + rows + '</div>' +
+      familyCard +
+      ((roster.length > 0 || famTotal > 0) ? '<div style="display:flex;justify-content:flex-end;margin-top:14px">' +
+        '<button class="btn btn-accent" data-action="save-attendance">' + icon('save', 15) + ' Save attendance</button></div>' : '') +
+      '</div>';
+  }
+
+  /* ------------------------------------------------------
+     Reports
+  ------------------------------------------------------ */
+  function reportsView() {
+    var groups = state.groups;
+    var rep = state.rep;
+    var range = rep.period === 'weekly' ? weekRange(rep.week) : rep.period === 'monthly' ? monthRange(rep.month) : yearRangeFn(rep.year);
+
+    var years = {}; years[new Date().getFullYear()] = true;
+    Object.keys(state.attendance).forEach(function (k) { var d = k.split('__')[1]; if (d) years[Number(d.slice(0, 4))] = true; });
+    var yearOptions = Object.keys(years).map(Number).sort(function (a, b) { return b - a; });
+
+    var entries = Object.keys(state.attendance).map(function (k) {
+      var parts = k.split('__');
+      return { groupId: parts[0], date: parts[1], records: state.attendance[k] };
+    }).filter(function (e) { return e.date >= range.start && e.date <= range.end; })
+      .filter(function (e) { return rep.groupFilter === 'all' || e.groupId === rep.groupFilter; });
+
+    var relevantGroups = rep.groupFilter === 'all' ? groups : groups.filter(function (g) { return g.id === rep.groupFilter; });
+
+    var memberRows = [];
+    relevantGroups.forEach(function (g) {
+      getRoster(g).forEach(function (person) {
+        var m = person.name;
+        var present = 0, absent = 0, excused = 0;
+        entries.filter(function (e) { return e.groupId === g.id; }).forEach(function (e) {
+          var s = e.records[m];
+          if (s === 'present') present++; else if (s === 'absent') absent++; else if (s === 'excused') excused++;
+        });
+        var marked = present + absent + excused;
+        memberRows.push({ group: g.name, member: m, isLeader: person.isLeader, present: present, absent: absent, excused: excused, marked: marked, rate: marked > 0 ? Math.round((present / marked) * 100) : null, active: present > 0 });
+      });
+    });
+    memberRows = sortRows(memberRows, rep.memberSort.key, rep.memberSort.dir, 'member');
+
+    var groupRows = relevantGroups.map(function (g) {
+      var mine = memberRows.filter(function (r) { return r.group === g.name; });
+      var leaderPresent = mine.reduce(function (s, r) { return s + r.present; }, 0);
+      var leaderAbsent = mine.reduce(function (s, r) { return s + r.absent; }, 0);
+      var leaderExcused = mine.reduce(function (s, r) { return s + r.excused; }, 0);
+      var famPresent = 0, famAbsent = 0, famExcused = 0, famGuest = 0;
+      entries.filter(function (e) { return e.groupId === g.id; }).forEach(function (e) {
+        famPresent += e.records.__familyPresent || 0;
+        famAbsent += e.records.__familyAbsent || 0;
+        famExcused += e.records.__familyExcused || 0;
+        famGuest += e.records.__familyGuest || 0;
+      });
+      var present = leaderPresent + famPresent, absent = leaderAbsent + famAbsent, excused = leaderExcused + famExcused;
+      var marked = present + absent + excused;
+      return {
+        id: g.id,
+        name: g.name,
+        familyMembers: g.familyMemberCount || 0,
+        present: present, absent: absent, excused: excused, guests: famGuest,
+        rate: marked > 0 ? Math.round((present / marked) * 100) : null
+      };
+    });
+    groupRows = sortRows(groupRows, rep.groupSort.key, rep.groupSort.dir, 'name');
+
+    var meetingsByGroup = relevantGroups.map(function (g) {
+      var count = entries.filter(function (e) { return e.groupId === g.id; }).length;
+      return { id: g.id, name: g.name, meetings: count };
+    });
+
+    var totalMembers = memberRows.length;
+    var activeMembers = memberRows.filter(function (r) { return r.active; }).length;
+    var sessionKeys = {}; entries.forEach(function (e) { sessionKeys[e.groupId + '__' + e.date] = true; });
+    var sessionsHeld = Object.keys(sessionKeys).length;
+    var totalPresent = memberRows.reduce(function (s, r) { return s + r.present; }, 0);
+    var totalMarks = memberRows.reduce(function (s, r) { return s + r.marked; }, 0);
+    var overallRate = totalMarks > 0 ? Math.round((totalPresent / totalMarks) * 100) : 0;
+
+    var byDate = {};
+    entries.forEach(function (e) {
+      if (!byDate[e.date]) byDate[e.date] = { date: e.date, present: 0, absent: 0, excused: 0 };
+      Object.keys(e.records).forEach(function (m) { var s = e.records[m]; if (byDate[e.date][s] !== undefined) byDate[e.date][s]++; });
+    });
+    var trendData = Object.keys(byDate).map(function (k) { return byDate[k]; }).sort(function (a, b) { return a.date.localeCompare(b.date); });
+
+    var periodBtns = ['weekly', 'monthly', 'yearly'].map(function (p) {
+      return '<button class="' + (rep.period === p ? 'active' : '') + '" data-action="set-period" data-period="' + p + '">' + p.charAt(0).toUpperCase() + p.slice(1) + '</button>';
+    }).join('');
+
+    var pickerHtml = '';
+    if (rep.period === 'weekly') pickerHtml = '<input type="week" id="rep-week" value="' + rep.week + '"/>';
+    else if (rep.period === 'monthly') pickerHtml = '<input type="month" id="rep-month" value="' + rep.month + '"/>';
+    else pickerHtml = '<select id="rep-year">' + yearOptions.map(function (y) { return '<option value="' + y + '"' + (String(y) === rep.year ? ' selected' : '') + '>' + y + '</option>'; }).join('') + '</select>';
+
+    var groupFilterHtml = '<select id="rep-group-filter"><option value="all"' + (rep.groupFilter === 'all' ? ' selected' : '') + '>All Dgroups</option>' +
+      groups.map(function (g) { return '<option value="' + esc(g.id) + '"' + (rep.groupFilter === g.id ? ' selected' : '') + '>' + esc(g.name) + '</option>'; }).join('') + '</select>';
+
+    var controls = '<div class="card controls"><div class="seg">' + periodBtns + '</div>' + pickerHtml + groupFilterHtml +
+      '<span class="range-label">' + esc(range.label) + '</span></div>';
+
+    var out = '<div class="wrap-lg">' +
+      '<div style="display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:12px">' +
+      '<div><h1 class="serif" style="font-size:24px;font-weight:600;color:var(--ink)">Attendance Report</h1>' +
+      '<p class="muted" style="font-size:13.5px;margin-top:4px">See which members are actively attending EFAD.</p></div>' +
+      '<button class="btn btn-ghost" data-action="export-excel" ' + (memberRows.length === 0 ? 'disabled' : '') + '>' + icon('download', 15) + ' Export Excel Report</button></div>' +
+      controls;
+
+    if (groups.length === 0) {
+      out += emptyState('No Dgroups yet', 'Add groups and record attendance to see reports here.');
+    } else {
+      out += '<div class="summary-grid">' +
+        summaryCard('Active Leaders', activeMembers + ' / ' + totalMembers, 'var(--present)') +
+        summaryCard('Sessions Held', sessionsHeld, 'var(--ink)') +
+        summaryCard('Overall Attendance', overallRate + '%', 'var(--accent)') +
+        summaryCard('Dgroups Covered', relevantGroups.length, 'var(--ink)') + '</div>';
+
+      out += '<div class="card chart-card"><div class="chart-title">' + icon('trend', 15) + ' Attendance per session</div>' +
+        '<canvas id="chart-trend" class="report-canvas" width="600" height="220"></canvas></div>';
+
+      out += '<div class="card chart-card"><div class="chart-title">' + icon('calendar', 15) + ' Meetings by Dgroup</div>' +
+        '<canvas id="chart-by-group" class="report-canvas" width="600" height="260"></canvas></div>';
+
+      out += topDgroupsCard(meetingsByGroup, rep.topN);
+
+      out += '<div class="card table-card" style="padding:0"><div class="table-head"><span class="table-head-title">' + icon('bar', 15) + '<h2>By Dgroup \u2014 ' + esc(range.label) + '</h2></span>' +
+        '<div class="table-search">' + icon('search', 14) + '<input type="text" id="search-group-table" placeholder="Search Dgroups" autocomplete="off"/></div></div>';
+      if (groupRows.length === 0) {
+        out += '<p class="muted" style="font-size:13.5px;text-align:center;padding:28px 0">No Dgroups to report on yet.</p>';
+      } else {
+        out += '<div class="table-scroll"><table><thead><tr>' +
+          sortHeader('Dgroup', 'name', rep.groupSort, 'sort-group') +
+          sortHeader('Family Members', 'familyMembers', rep.groupSort, 'sort-group', true) +
+          sortHeader('P', 'present', rep.groupSort, 'sort-group', true) +
+          sortHeader('A', 'absent', rep.groupSort, 'sort-group', true) +
+          sortHeader('E', 'excused', rep.groupSort, 'sort-group', true) +
+          sortHeader('G', 'guests', rep.groupSort, 'sort-group', true) +
+          sortHeader('Rate', 'rate', rep.groupSort, 'sort-group', true) +
+          '</tr></thead><tbody id="group-table-body">' +
+          groupRows.map(function (g) {
+            return '<tr data-search="' + esc(g.name.toLowerCase()) + '"><td><button class="btn-text" style="padding:0;font-weight:600;color:var(--ink)" data-action="show-group-detail" data-id="' + esc(g.id) + '">' + esc(g.name) + '</button></td><td class="text-center">' + g.familyMembers + '</td>' +
+              '<td class="text-center">' + g.present + '</td><td class="text-center">' + g.absent + '</td><td class="text-center">' + g.excused + '</td><td class="text-center">' + g.guests + '</td>' +
+              '<td class="text-center">' + (g.rate === null ? '\u2014' : g.rate + '%') + '</td></tr>';
+          }).join('') + '</tbody></table></div>' +
+          '<p class="no-rows-msg muted hidden" id="group-table-no-match">No Dgroups match your search.</p>';
+      }
+      out += '</div>';
+
+      out += '<div class="card table-card" style="padding:0;margin-top:18px"><div class="table-head"><span class="table-head-title">' + icon('users', 15) + '<h2>Leaders \u2014 ' + esc(range.label) + '</h2></span>' +
+        '<div class="table-search">' + icon('search', 14) + '<input type="text" id="search-member-table" placeholder="Search leaders" autocomplete="off"/></div></div>';
+      if (memberRows.length === 0) {
+        out += '<p class="muted" style="font-size:13.5px;text-align:center;padding:28px 0">No leaders to report on yet.</p>';
+      } else {
+        out += '<p class="muted" style="font-size:12px;padding:10px 16px 0">Family members are tracked as headcounts, not individually \u2014 see the By Dgroup totals above for their attendance.</p>';
+        out += '<div class="table-scroll"><table><thead><tr>' +
+          sortHeader('Member', 'member', rep.memberSort, 'sort-member') +
+          sortHeader('Dgroup', 'group', rep.memberSort, 'sort-member') +
+          sortHeader('P', 'present', rep.memberSort, 'sort-member', true) +
+          sortHeader('A', 'absent', rep.memberSort, 'sort-member', true) +
+          sortHeader('E', 'excused', rep.memberSort, 'sort-member', true) +
+          sortHeader('Rate', 'rate', rep.memberSort, 'sort-member', true) +
+          sortHeader('Status', 'active', rep.memberSort, 'sort-member') +
+          '</tr></thead><tbody id="member-table-body">' +
+          memberRows.map(function (r) {
+            return '<tr data-search="' + esc((r.member + ' ' + r.group).toLowerCase()) + '"><td style="font-weight:500;color:var(--ink)">' + esc(r.member) + (r.isLeader ? '<span class="leader-badge">Leader</span>' : '') + '</td><td class="muted">' + esc(r.group) + '</td>' +
+              '<td class="text-center">' + r.present + '</td><td class="text-center">' + r.absent + '</td><td class="text-center">' + r.excused + '</td>' +
+              '<td class="text-center">' + (r.rate === null ? '\u2014' : r.rate + '%') + '</td>' +
+              '<td><span class="pill ' + (r.active ? 'chip-present' : 'chip-neutral') + '">' + (r.active ? 'Active' : 'Inactive') + '</span></td></tr>';
+          }).join('') + '</tbody></table></div>' +
+          '<p class="no-rows-msg muted hidden" id="member-table-no-match">No leaders match your search.</p>';
+      }
+      out += '</div>';
+    }
+
+    out += '</div>';
+    lastReportData = {
+      memberRows: memberRows, groupRows: groupRows, trendData: trendData, range: range,
+      activeMembers: activeMembers, totalMembers: totalMembers, sessionsHeld: sessionsHeld,
+      overallRate: overallRate, groupsCovered: relevantGroups.length, meetingsByGroup: meetingsByGroup
+    };
+    return out;
+  }
+  function summaryCard(label, value, color) {
+    return '<div class="summary-card"><div class="summary-label">' + esc(label) + '</div><div class="summary-value serif" style="color:' + color + '">' + value + '</div></div>';
+  }
+
+  function topDgroupsCard(rows, topN) {
+    var ranked = rows.slice().sort(function (a, b) {
+      if (b.meetings !== a.meetings) return b.meetings - a.meetings;
+      return a.name.localeCompare(b.name);
+    });
+    var sliced = topN === 'all' ? ranked : ranked.slice(0, parseInt(topN, 10) || 5);
+    var options = ['5', '10', '20', 'all'];
+    var body;
+    if (sliced.length === 0) {
+      body = '<p class="muted" style="font-size:13px;text-align:center;padding:16px 0">No meetings recorded for this period.</p>';
+    } else {
+      body = '<div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">' +
+        sliced.map(function (g, i) {
+          return '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;background:rgba(0,0,0,0.03)">' +
+            '<span style="font-size:12px;font-weight:700;color:var(--muted);width:22px">#' + (i + 1) + '</span>' +
+            '<button class="btn-text" style="padding:0;flex:1;text-align:left;font-weight:600;color:var(--ink);font-size:13.5px" data-action="show-group-detail" data-id="' + esc(g.id) + '">' + esc(g.name) + '</button>' +
+            '<span style="font-size:12.5px;color:var(--muted)">' + g.meetings + ' meeting' + (g.meetings === 1 ? '' : 's') + '</span>' +
+            '</div>';
+        }).join('') + '</div>';
+    }
+    return '<div class="card chart-card"><div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">' +
+      '<div class="chart-title" style="margin-bottom:0">' + icon('calendar', 15) + ' Top Dgroups by Meetings</div>' +
+      '<select id="rep-topn" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12.5px;background:#fff">' +
+      options.map(function (o) { return '<option value="' + o + '"' + (topN === o ? ' selected' : '') + '>' + (o === 'all' ? 'Show all' : 'Top ' + o) + '</option>'; }).join('') +
+      '</select></div>' + body + '</div>';
+  }
+
+  /* Canvas-based stacked bar chart — used on-screen and captured as a PNG for the Excel export */
+  function drawStackedBarChart(canvas, items, seriesKeys, seriesColors, seriesLabels, opts) {
+    opts = opts || {};
+    var ctx = canvas.getContext('2d');
+    var W = canvas.width, H = canvas.height;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, W, H);
+
+    var padding = { top: 26, right: 14, bottom: opts.rotateLabels ? 62 : 34, left: 34 };
+    var chartW = W - padding.left - padding.right;
+    var chartH = H - padding.top - padding.bottom;
+
+    var maxVal = 1;
+    items.forEach(function (it) {
+      var total = seriesKeys.reduce(function (s, k) { return s + (it[k] || 0); }, 0);
+      if (total > maxVal) maxVal = total;
+    });
+
+    ctx.strokeStyle = '#DCE3E7'; ctx.lineWidth = 1;
+    ctx.font = '10px Arial, sans-serif'; ctx.fillStyle = '#5C7386'; ctx.textAlign = 'right';
+    var steps = 4;
+    for (var s = 0; s <= steps; s++) {
+      var y = padding.top + chartH - (chartH * (s / steps));
+      ctx.beginPath(); ctx.moveTo(padding.left, y); ctx.lineTo(W - padding.right, y); ctx.stroke();
+      ctx.fillText(String(Math.round(maxVal * (s / steps))), padding.left - 6, y + 3);
+    }
+
+    if (items.length === 0) {
+      ctx.fillStyle = '#5C7386'; ctx.textAlign = 'center'; ctx.font = '12px Arial, sans-serif';
+      ctx.fillText('No data for this period', W / 2, H / 2);
+    } else {
+      var n = items.length;
+      var slot = chartW / n;
+      var barW = Math.max(10, Math.min(30, slot * 0.55));
+      items.forEach(function (it, idx) {
+        var x = padding.left + idx * slot + (slot - barW) / 2;
+        var yCursor = padding.top + chartH;
+        seriesKeys.forEach(function (k, si) {
+          var val = it[k] || 0;
+          var h = (val / maxVal) * chartH;
+          ctx.fillStyle = seriesColors[si];
+          ctx.fillRect(x, yCursor - h, barW, h);
+          yCursor -= h;
+        });
+        ctx.fillStyle = '#5C7386'; ctx.font = '9px Arial, sans-serif';
+        var label = String(it.label);
+        var maxChars = opts.rotateLabels ? 18 : 11;
+        if (label.length > maxChars) label = label.slice(0, maxChars - 1) + '\u2026';
+        if (opts.rotateLabels) {
+          ctx.save();
+          ctx.textAlign = 'right';
+          ctx.translate(x + barW / 2, padding.top + chartH + 8);
+          ctx.rotate(-Math.PI / 4);
+          ctx.fillText(label, 0, 0);
+          ctx.restore();
+        } else {
+          ctx.textAlign = 'center';
+          ctx.fillText(label, x + barW / 2, padding.top + chartH + 14);
+        }
+      });
+    }
+
+    var lx = padding.left, ly = 14;
+    ctx.font = '10px Arial, sans-serif'; ctx.textAlign = 'left';
+    seriesKeys.forEach(function (k, si) {
+      var lbl = seriesLabels[si];
+      ctx.fillStyle = seriesColors[si];
+      ctx.fillRect(lx, ly - 8, 8, 8);
+      ctx.fillStyle = '#1F3C4D';
+      ctx.fillText(lbl, lx + 12, ly);
+      lx += ctx.measureText(lbl).width + 30;
+    });
+  }
+
+  var SERIES_KEYS = ['present', 'absent', 'excused'];
+  var SERIES_COLORS = ['#2F7A54', '#C0392B', '#B8862E'];
+  var SERIES_LABELS = ['Present', 'Absent', 'Excused'];
+
+  function drawReportCharts(data) {
+    var trendCanvas = document.getElementById('chart-trend');
+    if (trendCanvas) {
+      var trendItems = data.trendData.map(function (d) { return { label: d.date.slice(5), present: d.present, absent: d.absent, excused: d.excused }; });
+      drawStackedBarChart(trendCanvas, trendItems, SERIES_KEYS, SERIES_COLORS, SERIES_LABELS);
+    }
+    var groupCanvas = document.getElementById('chart-by-group');
+    if (groupCanvas) {
+      var groupItems = data.meetingsByGroup.slice()
+        .sort(function (a, b) { if (b.meetings !== a.meetings) return b.meetings - a.meetings; return a.name.localeCompare(b.name); })
+        .slice(0, 20)
+        .map(function (g) { return { label: g.name, meetings: g.meetings }; });
+      drawStackedBarChart(groupCanvas, groupItems, ['meetings'], ['#FF7518'], ['Meetings'], { rotateLabels: true });
+    }
+  }
+
+  function handleHeroImageFile(file) {
+    if (!/^image\//.test(file.type)) { flash('Please choose an image file'); return; }
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+      var img = new Image();
+      img.onload = function () {
+        var maxW = 1000;
+        var scale = Math.min(1, maxW / img.width);
+        var w = Math.max(1, Math.round(img.width * scale));
+        var h = Math.max(1, Math.round(img.height * scale));
+        var canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        var ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        var dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+        persistHeroImage(dataUrl);
+        flash('Dashboard photo updated');
+        render();
+      };
+      img.onerror = function () { flash('Could not read that image'); };
+      img.src = ev.target.result;
+    };
+    reader.onerror = function () { flash('Could not read that file'); };
+    reader.readAsDataURL(file);
+  }
+
+  function captureStoryDraft() {
+    var t = document.getElementById('story-title');
+    var c = document.getElementById('story-category');
+    var g = document.getElementById('story-group');
+    var cap = document.getElementById('story-caption');
+    if (!t && !c && !g && !cap) return;
+    var prev = state.storyAdmin.draft || {};
+    state.storyAdmin.draft = {
+      title: t ? t.value : (prev.title || ''),
+      category: c ? c.value : (prev.category || 'family'),
+      groupId: g ? g.value : (prev.groupId || ''),
+      caption: cap ? cap.value : (prev.caption || '')
+    };
+  }
+
+  function handleStoryImageFiles(fileList) {
+    var files = Array.prototype.slice.call(fileList || []);
+    var room = Math.max(0, 8 - state.storyAdmin.images.length);
+    if (files.length > room) flash('You can add up to 8 photos per story');
+    files.slice(0, room).forEach(function (file) {
+      if (!/^image\//.test(file.type)) return;
+      var reader = new FileReader();
+      reader.onload = function (ev) {
+        var img = new Image();
+        img.onload = function () {
+          var maxW = 900;
+          var scale = Math.min(1, maxW / img.width);
+          var w = Math.max(1, Math.round(img.width * scale));
+          var h = Math.max(1, Math.round(img.height * scale));
+          var canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          var ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, w, h);
+          state.storyAdmin.images.push(canvas.toDataURL('image/jpeg', 0.82));
+          captureStoryDraft();
+          render();
+        };
+        img.onerror = function () { flash('Could not read one of the images'); };
+        img.src = ev.target.result;
+      };
+      reader.onerror = function () { flash('Could not read one of the files'); };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function handleGroupImageFile(file) {
+    if (!/^image\//.test(file.type)) { flash('Please choose an image file'); return; }
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+      var img = new Image();
+      img.onload = function () {
+        var maxW = 500;
+        var scale = Math.min(1, maxW / img.width);
+        var w = Math.max(1, Math.round(img.width * scale));
+        var h = Math.max(1, Math.round(img.height * scale));
+        var canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        var ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        state.admin.photoData = canvas.toDataURL('image/jpeg', 0.85);
+        render();
+      };
+      img.onerror = function () { flash('Could not read that image'); };
+      img.src = ev.target.result;
+    };
+    reader.onerror = function () { flash('Could not read that file'); };
+    reader.readAsDataURL(file);
+  }
+
+  function exportBackup() {
+    var data = { app: 'efad-attendance-tracker', exportedAt: new Date().toISOString(), groups: state.groups, attendance: state.attendance, admins: state.admins, heroImage: state.heroImage || null, stories: state.stories };
+    var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = 'efad-backup-' + todayISO() + '.json';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    flash('Backup downloaded');
+  }
+
+  function importBackupFile(file) {
+    var reader = new FileReader();
+    reader.onload = function (ev) {
+      try {
+        var data = JSON.parse(ev.target.result);
+        if (!data || !Array.isArray(data.groups) || typeof data.attendance !== 'object' || data.attendance === null) {
+          throw new Error('invalid');
+        }
+        persistGroups(data.groups);
+        persistAttendance(data.attendance);
+        if (Array.isArray(data.admins) && data.admins.length > 0) persistAdmins(data.admins);
+        if (typeof data.heroImage === 'string') persistHeroImage(data.heroImage);
+        if (Array.isArray(data.stories)) persistStories(data.stories);
+        flash('Backup restored');
+        render();
+      } catch (e) {
+        flash('That file doesn\u2019t look like a valid EFAD backup');
+      }
+    };
+    reader.onerror = function () { flash('Could not read that file'); };
+    reader.readAsText(file);
+  }
+
+  function loadExcelJS(callback) {
+    if (window.ExcelJS) { callback(true); return; }
+    var s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js';
+    s.onload = function () { callback(!!window.ExcelJS); };
+    s.onerror = function () { callback(false); };
+    document.head.appendChild(s);
+  }
+
+  function exportExcelReport() {
+    if (!lastReportData) return;
+    flash('Preparing Excel report\u2026');
+    loadExcelJS(function (ok) {
+      if (ok) {
+        buildXlsxWithExcelJS();
+      } else {
+        flash('Could not load the spreadsheet library \u2014 using basic export instead');
+        exportLegacyXls();
+      }
+    });
+  }
+
+  function buildXlsxWithExcelJS() {
+    var d = lastReportData;
+    var wb = new ExcelJS.Workbook();
+    wb.creator = 'EFAD Attendance Tracker';
+    wb.created = new Date();
+
+    var HEADER_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF5F7F8' } };
+
+    /* Summary sheet: title, key stats, both charts as images */
+    var summary = wb.addWorksheet('Summary');
+    summary.getColumn(1).width = 14;
+    summary.mergeCells('A1:F1');
+    summary.getCell('A1').value = 'EFAD Attendance Report';
+    summary.getCell('A1').font = { bold: true, size: 15, color: { argb: 'FF00416A' } };
+    summary.mergeCells('A2:F2');
+    summary.getCell('A2').value = d.range.label;
+    summary.getCell('A2').font = { color: { argb: 'FF5C7386' }, italic: true };
+
+    var stats = [
+      ['Active Leaders', d.activeMembers + ' / ' + d.totalMembers],
+      ['Sessions Held', d.sessionsHeld],
+      ['Overall Attendance', d.overallRate + '%'],
+      ['Dgroups Covered', d.groupsCovered]
+    ];
+    stats.forEach(function (pair, i) {
+      var row = 4 + i;
+      summary.getCell('A' + row).value = pair[0];
+      summary.getCell('A' + row).font = { bold: true, color: { argb: 'FF1F3C4D' } };
+      summary.getCell('B' + row).value = pair[1];
+    });
+
+    var imgRow = 9;
+    var trendCanvas = document.getElementById('chart-trend');
+    if (trendCanvas) {
+      var trendId = wb.addImage({ base64: trendCanvas.toDataURL('image/png').split(',')[1], extension: 'png' });
+      summary.getCell('A' + imgRow).value = 'Attendance per session';
+      summary.getCell('A' + imgRow).font = { bold: true };
+      summary.addImage(trendId, { tl: { col: 0, row: imgRow }, ext: { width: 600, height: 220 } });
+    }
+
+    /* By Dgroup sheet */
+    var groupSheet = wb.addWorksheet('By Dgroup');
+    groupSheet.columns = [
+      { header: 'Dgroup', key: 'name', width: 26 },
+      { header: 'Family Members', key: 'familyMembers', width: 16 },
+      { header: 'Present', key: 'present', width: 10 },
+      { header: 'Absent', key: 'absent', width: 10 },
+      { header: 'Excused', key: 'excused', width: 10 },
+      { header: 'Guests', key: 'guests', width: 10 },
+      { header: 'Attendance Rate', key: 'rate', width: 16 }
+    ];
+    groupSheet.getRow(1).font = { bold: true };
+    groupSheet.getRow(1).eachCell(function (cell) { cell.fill = HEADER_FILL; });
+    d.groupRows.forEach(function (g) {
+      groupSheet.addRow({ name: g.name, familyMembers: g.familyMembers, present: g.present, absent: g.absent, excused: g.excused, guests: g.guests, rate: g.rate === null ? null : g.rate / 100 });
+    });
+    groupSheet.getColumn('rate').numFmt = '0%';
+
+    /* By Leader sheet */
+    var memberSheet = wb.addWorksheet('By Leader');
+    memberSheet.columns = [
+      { header: 'Leader', key: 'member', width: 24 },
+      { header: 'Dgroup', key: 'group', width: 24 },
+      { header: 'Present', key: 'present', width: 10 },
+      { header: 'Absent', key: 'absent', width: 10 },
+      { header: 'Excused', key: 'excused', width: 10 },
+      { header: 'Sessions Marked', key: 'marked', width: 16 },
+      { header: 'Attendance Rate', key: 'rate', width: 16 },
+      { header: 'Active', key: 'active', width: 10 }
+    ];
+    memberSheet.getRow(1).font = { bold: true };
+    memberSheet.getRow(1).eachCell(function (cell) { cell.fill = HEADER_FILL; });
+    d.memberRows.forEach(function (r) {
+      memberSheet.addRow({ member: r.member, group: r.group, present: r.present, absent: r.absent, excused: r.excused, marked: r.marked, rate: r.rate === null ? null : r.rate / 100, active: r.active ? 'Yes' : 'No' });
+    });
+    memberSheet.getColumn('rate').numFmt = '0%';
+
+    wb.xlsx.writeBuffer().then(function (buffer) {
+      var blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url; a.download = 'efad-attendance-report-' + d.range.start + '-to-' + d.range.end + '.xlsx';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      flash('Excel report downloaded');
+    }).catch(function () {
+      flash('Could not generate the Excel file \u2014 using basic export instead');
+      exportLegacyXls();
+    });
+  }
+
+  function exportLegacyXls() {
+    if (!lastReportData) return;
+    var memberRows = lastReportData.memberRows, groupRows = lastReportData.groupRows, range = lastReportData.range;
+
+    var trendCanvas = document.getElementById('chart-trend');
+    var trendImg = trendCanvas ? trendCanvas.toDataURL('image/png') : null;
+
+    var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">' +
+      '<head><meta charset="UTF-8"/><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>' +
+      '<x:Name>EFAD Report</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->' +
+      '<style>body{font-family:Calibri,Arial,sans-serif;} table{border-collapse:collapse;} td,th{border:1px solid #DCE3E7;padding:5px 8px;font-size:12px;} th{background:#F5F7F8;text-align:left;}</style>' +
+      '</head><body>' +
+      '<h2 style="color:#00416A">EFAD Attendance Report</h2>' +
+      '<p style="color:#5C7386">' + esc(range.label) + '</p>';
+
+    if (trendImg) html += '<p><b>Attendance per session</b></p><img src="' + trendImg + '" width="600" height="220"/>';
+
+    html += '<p><b>By Dgroup</b></p><table><tr><th>Dgroup</th><th>Family Members</th><th>Present</th><th>Absent</th><th>Excused</th><th>Guests</th><th>Attendance Rate</th></tr>' +
+      groupRows.map(function (g) {
+        return '<tr><td>' + esc(g.name) + '</td><td>' + g.familyMembers + '</td><td>' + g.present + '</td><td>' + g.absent + '</td><td>' + g.excused + '</td><td>' + g.guests + '</td><td>' + (g.rate === null ? '' : g.rate + '%') + '</td></tr>';
+      }).join('') + '</table>';
+
+    html += '<p><b>By Leader</b></p><table><tr><th>Leader</th><th>Dgroup</th><th>Present</th><th>Absent</th><th>Excused</th><th>Sessions Marked</th><th>Attendance Rate</th><th>Active</th></tr>' +
+      memberRows.map(function (r) {
+        return '<tr><td>' + esc(r.member) + '</td><td>' + esc(r.group) + '</td><td>' + r.present + '</td><td>' + r.absent + '</td><td>' + r.excused + '</td><td>' + r.marked + '</td><td>' + (r.rate === null ? '' : r.rate + '%') + '</td><td>' + (r.active ? 'Yes' : 'No') + '</td></tr>';
+      }).join('') + '</table>';
+
+    html += '</body></html>';
+
+    var blob = new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = 'efad-attendance-report-' + range.start + '-to-' + range.end + '.xls';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  /* ------------------------------------------------------
+     Admin Maintenance
+  ------------------------------------------------------ */
+  function adminView() {
+    var editing = state.admin.editId !== null;
+    var editGroup = editing ? state.groups.filter(function (g) { return g.id === state.admin.editId; })[0] : null;
+    var vals = editGroup ? { name: editGroup.name, schedule: editGroup.schedule, leader: editGroup.leader, familyMemberCount: editGroup.familyMemberCount } : { name: '', schedule: 'Flexible', leader: '', familyMemberCount: '' };
+    var errs = state.admin.errors;
+
+    var out = '<div class="wrap">' +
+      '<h1 class="serif" style="font-size:24px;font-weight:600;color:var(--ink)">Admin Maintenance Menu</h1>' +
+      '<p class="muted" style="font-size:13.5px;margin-top:4px">Add and manage EFAD discipleship groups.</p>' +
+      '<div class="card" style="margin-top:20px">' +
+      '<h2 class="serif" style="font-size:16px;font-weight:600;color:var(--ink)">Backup & Restore</h2>' +
+      '<p class="muted" style="font-size:13px;margin-top:4px">Your data lives only in this browser, on this device. If you switch to an updated copy of this file, export a backup first, then import it into the new copy so nothing is lost.</p>' +
+      '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">' +
+      '<button class="btn btn-ghost" data-action="export-backup">' + icon('download', 15) + ' Export Backup</button>' +
+      '<button class="btn btn-ghost" data-action="import-backup">' + icon('save', 15) + ' Import Backup</button>' +
+      '<input type="file" id="import-file" accept="application/json" style="display:none"/>' +
+      '</div></div>' +
+      '<div class="card" style="margin-top:20px">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between">' +
+      '<h2 class="serif" style="font-size:16px;font-weight:600;color:var(--ink)">' + (editing ? 'Edit Dgroup' : 'Add a new Dgroup') + '</h2>' +
+      (editing ? '<button class="btn-text" data-action="admin-cancel-edit">Cancel edit</button>' : '') + '</div>' +
+      '<div class="form-grid">' +
+      field('Dgroup Name', '<input type="text" id="admin-name" class="uppercase-input" placeholder="e.g. North Valley Young Pros" value="' + esc(vals.name) + '"/>', { error: errs.name }) +
+      field('Type', '<input type="text" value="EFAD" disabled style="background:rgba(0,0,0,0.04);color:var(--muted)"/>') +
+      field('Schedule', '<select id="admin-schedule">' + SCHEDULE_OPTIONS.map(function (s) { return '<option value="' + s + '"' + (vals.schedule === s ? ' selected' : '') + '>' + s + '</option>'; }).join('') + '</select>', { error: errs.schedule }) +
+      field('Dleader (Discipleship Leader)', '<input type="text" id="admin-leader" class="uppercase-input" placeholder="e.g. John Dela Cruz" value="' + esc(vals.leader) + '"/>', { error: errs.leader }) +
+      field('Number of Family Members', '<input type="number" id="admin-member-count" min="0" step="1" placeholder="e.g. 5" value="' + (vals.familyMemberCount === '' || vals.familyMemberCount == null ? '' : vals.familyMemberCount) + '"/>', { error: errs.familyMemberCount, hint: 'Just the headcount \u2014 you don\u2019t need to list every name.' }) +
+      '</div>' +
+      '<div style="margin-top:14px">' +
+      (function () {
+        var previewPhoto = state.admin.photoData === '' ? null : (state.admin.photoData || (editGroup ? editGroup.photo : null));
+        return '<label style="display:block;font-size:12px;font-weight:600;color:var(--ink);margin-bottom:6px">Photo (optional) \u2014 helps recognize the Dgroup or leader</label>' +
+          (previewPhoto ? '<img src="' + previewPhoto + '" style="width:88px;height:88px;object-fit:cover;border-radius:50%;border:1px solid var(--border);display:block;margin-bottom:8px"/>' : '') +
+          '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+          '<button class="btn btn-ghost btn-sm" data-action="group-upload-photo">' + icon('camera', 13) + ' ' + (previewPhoto ? 'Change Photo' : 'Upload Photo') + '</button>' +
+          (previewPhoto ? '<button class="btn-text" style="color:var(--absent)" data-action="group-remove-photo">Remove photo</button>' : '') +
+          '<input type="file" id="group-image-file" accept="image/*" style="display:none"/>' +
+          '</div>';
+      })() +
+      '</div>' +
+      '<div style="display:flex;justify-content:flex-end;margin-top:14px">' +
+      '<button class="btn btn-primary" data-action="admin-submit">' + icon('plus', 15) + ' ' + (editing ? 'Save changes' : 'Add Dgroup') + '</button></div>' +
+      '</div>';
+
+    out += '<div style="margin-top:28px"><h2 class="serif" style="font-size:16px;font-weight:600;color:var(--ink);margin-bottom:10px">Existing Dgroups (' + state.groups.length + ')</h2>';
+    if (state.groups.length === 0) {
+      out += emptyState('No Dgroups yet', 'Use the form above to add your first EFAD group.');
+    } else {
+      out += state.groups.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).map(function (g) {
+        var deleting = state.admin.confirmDeleteId === g.id;
+        return '<div class="group-row">' +
+          (g.photo ? '<img src="' + g.photo + '" style="width:40px;height:40px;border-radius:50%;object-fit:cover"/>' : '') +
+          '<div style="flex:1;min-width:140px"><div class="group-row-name">' + esc(g.name) + '</div>' +
+          '<div class="group-row-meta">EFAD \u00b7 ' + esc(g.schedule) + ' \u00b7 Leader: ' + esc(g.leader) + ' \u00b7 ' + g.familyMemberCount + ' member' + (g.familyMemberCount === 1 ? '' : 's') + '</div></div>' +
+          '<div class="row-actions">' +
+          '<button class="btn btn-ghost btn-sm" data-action="admin-edit" data-id="' + esc(g.id) + '">' + icon('pencil', 13) + ' Edit</button>' +
+          (deleting ?
+            '<span class="muted" style="font-size:12px">Delete?</span>' +
+            '<button class="btn btn-sm" style="background:var(--absent);color:#fff" data-action="admin-delete-yes" data-id="' + esc(g.id) + '">Yes</button>' +
+            '<button class="btn-text" data-action="admin-delete-no">No</button>'
+            : '<button class="btn-text" style="color:var(--absent)" data-action="admin-delete-ask" data-id="' + esc(g.id) + '">' + icon('trash', 13) + ' Delete</button>') +
+          '</div></div>';
+      }).join('');
+    }
+    out += '</div></div>';
+    out += storiesAdminSection();
+    out += administratorsSection();
+    return out;
+  }
+
+  function storiesAdminSection() {
+    var editing = state.storyAdmin.editId !== null;
+    var editStory = editing ? state.stories.filter(function (s) { return s.id === state.storyAdmin.editId; })[0] : null;
+    var vals = state.storyAdmin.draft ? state.storyAdmin.draft
+      : editStory ? { title: editStory.title, category: editStory.category, groupId: editStory.groupId || '', caption: editStory.caption }
+      : { title: '', category: 'family', groupId: '', caption: '' };
+    var errs = state.storyAdmin.errors;
+    var images = state.storyAdmin.images || [];
+
+    var thumbsHtml = images.map(function (imgSrc, idx) {
+      return '<div class="photo-thumb-wrap"><img src="' + imgSrc + '" style="width:72px;height:72px;object-fit:cover;border-radius:8px;border:1px solid var(--border)"/>' +
+        '<button class="photo-thumb-remove" data-action="story-remove-image" data-idx="' + idx + '" aria-label="Remove photo">' + icon('close', 11) + '</button></div>';
+    }).join('');
+
+    var out = '<div style="margin-top:28px">' +
+      '<h2 class="serif" style="font-size:16px;font-weight:600;color:var(--ink);margin-bottom:4px">Stories & Updates</h2>' +
+      '<p class="muted" style="font-size:13px;margin-bottom:14px">Share short stories or updates from Family Dgroups or the Across Ministry, with optional photos.</p>' +
+      '<div class="card">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between">' +
+      '<h3 style="font-size:14.5px;font-weight:600;color:var(--ink);margin:0">' + (editing ? 'Edit Story' : 'Add a Story or Update') + '</h3>' +
+      (editing ? '<button class="btn-text" data-action="story-cancel-edit">Cancel edit</button>' : '') + '</div>' +
+      '<div class="form-grid">' +
+      field('Title', '<input type="text" id="story-title" placeholder="e.g. A Family Reconciled" value="' + esc(vals.title) + '"/>', { error: errs.title }) +
+      field('Category', '<select id="story-category"><option value="family"' + (vals.category === 'family' ? ' selected' : '') + '>Family Dgroup</option><option value="ministry"' + (vals.category === 'ministry' ? ' selected' : '') + '>Across Ministry</option></select>') +
+      field('Related Dgroup (optional)', '<select id="story-group"><option value="">\u2014 General / Not specific \u2014</option>' +
+        state.groups.map(function (g) { return '<option value="' + esc(g.id) + '"' + (vals.groupId === g.id ? ' selected' : '') + '>' + esc(g.name) + '</option>'; }).join('') + '</select>') +
+      field('Story / Update', '<textarea id="story-caption" rows="5" placeholder="Share what\u2019s happening\u2026">' + esc(vals.caption) + '</textarea>', { error: errs.caption, full: true }) +
+      '</div>' +
+      '<div style="margin-top:14px">' +
+      '<label style="display:block;font-size:12px;font-weight:600;color:var(--ink);margin-bottom:6px">Photos (optional, up to 8) \u2014 ' + images.length + ' / 8 added</label>' +
+      (thumbsHtml ? '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">' + thumbsHtml + '</div>' : '') +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+      '<button class="btn btn-ghost btn-sm" data-action="story-upload-photo">' + icon('camera', 13) + ' Add Photos</button>' +
+      '<input type="file" id="story-image-file" accept="image/*" multiple style="display:none"/>' +
+      '</div><p class="muted" style="font-size:11px;margin-top:6px">Multiple photos will show as a swipeable carousel on the story.</p></div>' +
+      '<div style="display:flex;justify-content:flex-end;margin-top:14px">' +
+      '<button class="btn btn-primary" data-action="story-submit">' + icon('plus', 15) + ' ' + (editing ? 'Save changes' : 'Add Story') + '</button></div>' +
+      '</div>';
+
+    out += '<div style="margin-top:12px">';
+    var sorted = state.stories.slice().sort(function (a, b) { return (b.date || '').localeCompare(a.date || ''); });
+    if (sorted.length === 0) {
+      out += '<p class="muted" style="font-size:13px;padding:8px 2px">No stories yet.</p>';
+    } else {
+      sorted.forEach(function (s) {
+        var deleting = state.storyAdmin.confirmDeleteId === s.id;
+        var thumb = s.images && s.images[0];
+        out += '<div class="group-row">' +
+          (thumb ? '<img src="' + thumb + '" style="width:48px;height:48px;object-fit:cover;border-radius:8px"/>' : '') +
+          '<div style="flex:1;min-width:140px"><div class="group-row-name">' + esc(s.title) + '</div>' +
+          '<div class="group-row-meta">' + (s.category === 'ministry' ? 'Across Ministry' : 'Family Dgroup') + ' \u00b7 ' + esc(formatDateLabel(s.date)) + (s.images && s.images.length > 1 ? ' \u00b7 ' + s.images.length + ' photos' : '') + '</div></div>' +
+          '<div class="row-actions">' +
+          '<button class="btn btn-ghost btn-sm" data-action="story-edit" data-id="' + esc(s.id) + '">' + icon('pencil', 13) + ' Edit</button>' +
+          (deleting ?
+            '<span class="muted" style="font-size:12px">Delete?</span>' +
+            '<button class="btn btn-sm" style="background:var(--absent);color:#fff" data-action="story-delete-yes" data-id="' + esc(s.id) + '">Yes</button>' +
+            '<button class="btn-text" data-action="story-delete-no">No</button>'
+            : '<button class="btn-text" style="color:var(--absent)" data-action="story-delete-ask" data-id="' + esc(s.id) + '">' + icon('trash', 13) + ' Delete</button>') +
+          '</div></div>';
+      });
+    }
+    out += '</div></div>';
+    return out;
+  }
+
+  function administratorsSection() {
+    var editing = state.adminUsers.editId !== null;
+    var editAdmin = editing ? state.admins.filter(function (a) { return a.id === state.adminUsers.editId; })[0] : null;
+    var vals = editAdmin ? { name: editAdmin.name, pin: editAdmin.pin } : { name: '', pin: '' };
+    var errs = state.adminUsers.errors;
+
+    var out = '<div style="margin-top:28px">' +
+      '<h2 class="serif" style="font-size:16px;font-weight:600;color:var(--ink);margin-bottom:4px">Administrators</h2>' +
+      '<p class="muted" style="font-size:13px;margin-bottom:14px">Anyone with a valid PIN below can open this Maintenance Menu. Keep at least one administrator at all times.</p>' +
+      '<div class="card">' +
+      '<div style="display:flex;align-items:center;justify-content:space-between">' +
+      '<h3 style="font-size:14.5px;font-weight:600;color:var(--ink);margin:0">' + (editing ? 'Edit Administrator' : 'Add an Administrator') + '</h3>' +
+      (editing ? '<button class="btn-text" data-action="adminuser-cancel-edit">Cancel edit</button>' : '') + '</div>' +
+      '<div class="form-grid">' +
+      field('Name', '<input type="text" id="adminuser-name" placeholder="e.g. Pastor Ana Reyes" value="' + esc(vals.name) + '"/>', { error: errs.name }) +
+      field('Password (PIN)', '<input type="password" id="adminuser-pin" placeholder="e.g. 4821" value="' + esc(vals.pin) + '"/>', { error: errs.pin, hint: 'At least 4 characters. Used to log in as this administrator.' }) +
+      '</div>' +
+      '<div style="display:flex;justify-content:flex-end;margin-top:14px">' +
+      '<button class="btn btn-primary" data-action="adminuser-submit">' + icon('key', 15) + ' ' + (editing ? 'Save changes' : 'Add Administrator') + '</button></div>' +
+      '</div>';
+
+    out += '<div style="margin-top:12px">';
+    state.admins.forEach(function (a) {
+      var deleting = state.adminUsers.confirmDeleteId === a.id;
+      var revealed = state.adminUsers.revealId === a.id;
+      var lastOne = state.admins.length <= 1;
+      out += '<div class="group-row"><div><div class="group-row-name">' + esc(a.name) + (a.id === state.currentAdminId ? ' <span class="leader-badge">You</span>' : '') + '</div>' +
+        '<div class="group-row-meta">PIN: ' + (revealed ? esc(a.pin) : '\u2022\u2022\u2022\u2022') +
+        ' &middot; <button class="btn-text" style="padding:0" data-action="adminuser-toggle-reveal" data-id="' + esc(a.id) + '">' + (revealed ? 'Hide' : 'Show') + '</button></div></div>' +
+        '<div class="row-actions">' +
+        '<button class="btn btn-ghost btn-sm" data-action="adminuser-edit" data-id="' + esc(a.id) + '">' + icon('pencil', 13) + ' Edit</button>' +
+        (lastOne ? '<span class="muted" style="font-size:11.5px">At least 1 required</span>' :
+          (deleting ?
+            '<span class="muted" style="font-size:12px">Delete?</span>' +
+            '<button class="btn btn-sm" style="background:var(--absent);color:#fff" data-action="adminuser-delete-yes" data-id="' + esc(a.id) + '">Yes</button>' +
+            '<button class="btn-text" data-action="adminuser-delete-no">No</button>'
+            : '<button class="btn-text" style="color:var(--absent)" data-action="adminuser-delete-ask" data-id="' + esc(a.id) + '">' + icon('trash', 13) + ' Delete</button>')) +
+        '</div></div>';
+    });
+    out += '</div></div>';
+    return out;
+  }
+
+  /* ------------------------------------------------------
+     Login modal + toast
+  ------------------------------------------------------ */
+  function loginModal() {
+    return '<div class="modal-backdrop"><div class="modal">' +
+      '<div class="modal-title">' + icon('shield', 19) + '<h2>Admin Access</h2></div>' +
+      '<p class="muted" style="font-size:13.5px;margin-bottom:14px">Enter an administrator PIN to open the Maintenance Menu.</p>' +
+      '<input type="password" inputmode="numeric" id="login-pin" placeholder="Enter PIN" autocomplete="off" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:10px 12px;outline:none"/>' +
+      (state.pinError ? '<p style="font-size:12px;margin-top:8px;color:var(--absent)">' + esc(state.pinError) + '</p>' : '') +
+      '<div style="margin-top:18px;display:flex;gap:8px;justify-content:flex-end">' +
+      '<button class="btn-text" data-action="login-cancel">Cancel</button>' +
+      '<button class="btn btn-primary" data-action="login-submit">Enter</button></div>' +
+      '<p class="muted" style="font-size:11px;margin-top:14px">Data is stored only in this browser on this device.</p>' +
+      '</div></div>';
+  }
+  function toastHtml() { return '<div class="toast">' + esc(state.toast) + '</div>'; }
+
+  function groupDetailModal() {
+    var g = state.groups.filter(function (x) { return x.id === state.groupDetailId; })[0];
+    if (!g) return '';
+    var sessions = Object.keys(state.attendance).map(function (k) {
+      var parts = k.split('__');
+      return { groupId: parts[0], date: parts[1], records: state.attendance[k] };
+    }).filter(function (e) { return e.groupId === g.id; }).sort(function (a, b) { return b.date.localeCompare(a.date); });
+
+    var rows = sessions.map(function (e) {
+      var leaderStatus = g.leader ? e.records[g.leader] : null;
+      var present = (e.records.__familyPresent || 0) + (leaderStatus === 'present' ? 1 : 0);
+      var absent = (e.records.__familyAbsent || 0) + (leaderStatus === 'absent' ? 1 : 0);
+      var excused = (e.records.__familyExcused || 0) + (leaderStatus === 'excused' ? 1 : 0);
+      var guest = e.records.__familyGuest || 0;
+      return '<tr><td>' + esc(formatDateLabel(e.date)) + '</td><td class="text-center">' + present + '</td><td class="text-center">' + absent + '</td><td class="text-center">' + excused + '</td><td class="text-center">' + guest + '</td></tr>';
+    }).join('');
+
+    return '<div class="modal-backdrop"><div class="modal" style="max-width:480px;max-height:80vh;overflow-y:auto">' +
+      '<div class="modal-title" style="justify-content:space-between"><span style="display:flex;align-items:center;gap:8px">' +
+      (g.photo ? '<img src="' + g.photo + '" style="width:28px;height:28px;border-radius:50%;object-fit:cover"/>' : icon('calendar', 18)) +
+      '<h2>' + esc(g.name) + '</h2></span>' +
+      '<button class="btn-text" data-action="close-group-detail">' + icon('close', 16) + '</button></div>' +
+      '<p class="muted" style="font-size:12.5px;margin-bottom:4px">Leader: <strong class="ink">' + esc(g.leader) + '</strong> \u00b7 ' + esc(g.schedule) + ' \u00b7 ' + g.familyMemberCount + ' family member' + (g.familyMemberCount === 1 ? '' : 's') + '</p>' +
+      '<p style="font-size:13px;font-weight:600;color:var(--accent);margin-bottom:12px">Total Times Met: ' + sessions.length + '</p>' +
+      (rows ? '<div class="table-scroll"><table><thead><tr><th>Date Met</th><th class="text-center">P</th><th class="text-center">A</th><th class="text-center">E</th><th class="text-center">G</th></tr></thead><tbody>' + rows + '</tbody></table></div>'
+        : '<p class="muted" style="font-size:13px">No sessions recorded yet.</p>') +
+      '</div></div>';
+  }
+
+  function lightboxModal() {
+    var story = state.stories.filter(function (s) { return s.id === state.lightbox.storyId; })[0];
+    if (!story || !story.images || story.images.length === 0) return '';
+    var idx = state.lightbox.index;
+    if (idx >= story.images.length) idx = 0;
+    var multi = story.images.length > 1;
+    return '<div class="lightbox-backdrop" data-action="close-lightbox">' +
+      '<button class="lightbox-close" data-action="close-lightbox" aria-label="Close">' + icon('close', 20) + '</button>' +
+      (multi ? '<button class="lightbox-nav lightbox-prev" data-action="lightbox-prev" aria-label="Previous photo">' + icon('back', 20) + '</button>' : '') +
+      '<img src="' + story.images[idx] + '" class="lightbox-img" data-action="lightbox-noop" alt="' + esc(story.title) + '"/>' +
+      (multi ? '<button class="lightbox-nav lightbox-next" data-action="lightbox-next" aria-label="Next photo">' + icon('back', 20) + '</button>' : '') +
+      (multi ? '<div class="lightbox-count">' + (idx + 1) + ' / ' + story.images.length + '</div>' : '') +
+      '</div>';
+  }
+
+  /* ------------------------------------------------------
+     Render
+  ------------------------------------------------------ */
+  function render() {
+    var mainHtml = state.view === 'admin' && state.isAdmin ? adminView()
+      : state.view === 'reports' ? reportsView()
+      : state.view === 'stories' ? storiesView()
+      : dashboardView();
+    var html = '<div class="layout">' + sideNav() + '<main class="main">' + mainHtml + '</main></div>' +
+      (state.loginOpen ? loginModal() : '') + (state.groupDetailId ? groupDetailModal() : '') + (state.lightbox ? lightboxModal() : '') + (state.toast ? toastHtml() : '');
+    document.getElementById('app').innerHTML = html;
+    wireLiveInputs();
+    if (state.view === 'reports' && lastReportData) drawReportCharts(lastReportData);
+    ensureStorySlideshow(state.view === 'stories');
+  }
+
+  function ensureStorySlideshow(active) {
+    if (active) {
+      if (!storySlideshowTimer) {
+        storySlideshowTimer = setInterval(function () {
+          if (state.view !== 'stories' || state.lightbox) return;
+          var advanced = false;
+          state.stories.forEach(function (s) {
+            if (s.images && s.images.length > 1) {
+              storyCarouselIndex[s.id] = ((storyCarouselIndex[s.id] || 0) + 1) % s.images.length;
+              advanced = true;
+            }
+          });
+          if (advanced) render();
+        }, 3000);
+      }
+    } else if (storySlideshowTimer) {
+      clearInterval(storySlideshowTimer);
+      storySlideshowTimer = null;
+    }
+  }
+
+  /* Live, non-rerendering input behaviors (avoid losing focus/cursor) */
+  function wireLiveInputs() {
+    var search = document.getElementById('dash-search');
+    if (search) {
+      search.addEventListener('input', function () {
+        var q = search.value.trim().toLowerCase();
+        var cards = document.querySelectorAll('#group-grid .group-card');
+        var anyVisible = false;
+        cards.forEach(function (card) {
+          var match = !q || (card.getAttribute('data-search') || '').indexOf(q) !== -1;
+          card.classList.toggle('hidden', !match);
+          if (match) anyVisible = true;
+        });
+        var noMatch = document.getElementById('no-match-msg');
+        if (noMatch) noMatch.classList.toggle('hidden', anyVisible || cards.length === 0);
+      });
+    }
+    var famWrap = document.getElementById('family-tally-wrap');
+    if (famWrap) {
+      var famTotalVal = parseInt(famWrap.getAttribute('data-total'), 10) || 0;
+      var pEl = document.getElementById('family-present');
+      var aEl = document.getElementById('family-absent');
+      var eEl = document.getElementById('family-excused');
+      var liveEl = document.getElementById('family-unmarked-live');
+      var recomputeFam = function () {
+        var p = parseInt((pEl || {}).value, 10); if (isNaN(p) || p < 0) p = 0;
+        var a = parseInt((aEl || {}).value, 10); if (isNaN(a) || a < 0) a = 0;
+        var ex = parseInt((eEl || {}).value, 10); if (isNaN(ex) || ex < 0) ex = 0;
+        var left = famTotalVal - (p + a + ex);
+        if (left < 0) left = 0;
+        if (liveEl) liveEl.textContent = left;
+      };
+      [pEl, aEl, eEl].forEach(function (el) { if (el) el.addEventListener('input', recomputeFam); });
+    }
+    var storySearch = document.getElementById('story-search');
+    if (storySearch) {
+      storySearch.addEventListener('input', function () {
+        var q = storySearch.value.trim().toLowerCase();
+        var cards = document.querySelectorAll('#story-grid .story-card');
+        var anyVisible = false;
+        cards.forEach(function (card) {
+          var match = !q || (card.getAttribute('data-search') || '').indexOf(q) !== -1;
+          card.classList.toggle('hidden', !match);
+          if (match) anyVisible = true;
+        });
+        var noMatch = document.getElementById('story-no-match');
+        if (noMatch) noMatch.classList.toggle('hidden', anyVisible || cards.length === 0);
+      });
+    }
+    var groupTableSearch = document.getElementById('search-group-table');
+    if (groupTableSearch) {
+      groupTableSearch.addEventListener('input', function () {
+        var q = groupTableSearch.value.trim().toLowerCase();
+        var rows = document.querySelectorAll('#group-table-body tr');
+        var anyVisible = false;
+        rows.forEach(function (tr) {
+          var match = !q || (tr.getAttribute('data-search') || '').indexOf(q) !== -1;
+          tr.classList.toggle('hidden', !match);
+          if (match) anyVisible = true;
+        });
+        var noMatch = document.getElementById('group-table-no-match');
+        if (noMatch) noMatch.classList.toggle('hidden', anyVisible || rows.length === 0);
+      });
+    }
+    var memberTableSearch = document.getElementById('search-member-table');
+    if (memberTableSearch) {
+      memberTableSearch.addEventListener('input', function () {
+        var q = memberTableSearch.value.trim().toLowerCase();
+        var rows = document.querySelectorAll('#member-table-body tr');
+        var anyVisible = false;
+        rows.forEach(function (tr) {
+          var match = !q || (tr.getAttribute('data-search') || '').indexOf(q) !== -1;
+          tr.classList.toggle('hidden', !match);
+          if (match) anyVisible = true;
+        });
+        var noMatch = document.getElementById('member-table-no-match');
+        if (noMatch) noMatch.classList.toggle('hidden', anyVisible || rows.length === 0);
+      });
+    }
+    var pinInput = document.getElementById('login-pin');
+    if (pinInput) {
+      pinInput.focus();
+      pinInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') submitLogin(); });
+    }
+  }
+
+  /* ------------------------------------------------------
+     Actions
+  ------------------------------------------------------ */
+  function submitLogin() {
+    var pin = (document.getElementById('login-pin') || {}).value || '';
+    var match = state.admins.filter(function (a) { return a.pin === pin; })[0];
+    if (match) {
+      state.isAdmin = true; state.currentAdminId = match.id; state.loginOpen = false; state.pinError = ''; state.view = 'admin';
+    } else {
+      state.pinError = 'Incorrect PIN. Try again.';
+    }
+    render();
+  }
+
+  function handleClick(e) {
+    var el = e.target.closest('[data-action]');
+    if (!el) return;
+    var action = el.getAttribute('data-action');
+
+    if (action === 'nav') {
+      var view = el.getAttribute('data-view');
+      if (view === 'admin' && !state.isAdmin) { state.pinError = ''; state.loginOpen = true; render(); return; }
+      state.view = view; render(); return;
+    }
+    if (action === 'logout') { state.isAdmin = false; state.currentAdminId = null; state.view = 'dashboard'; flash('Signed out of Admin'); return; }
+    if (action === 'login-submit') { submitLogin(); return; }
+    if (action === 'login-cancel') { state.loginOpen = false; render(); return; }
+    if (action === 'change-hero-image') { if (!state.isAdmin) return; var hf = document.getElementById('hero-image-file'); if (hf) hf.click(); return; }
+    if (action === 'reset-hero-image') { persistHeroImage(null); flash('Reset to default photo'); render(); return; }
+
+    if (action === 'select-group') { state.dash.selectedId = el.getAttribute('data-id'); render(); return; }
+    if (action === 'back-to-groups') { state.dash.selectedId = null; state.att.groupId = null; render(); return; }
+
+    if (action === 'set-status') {
+      var g = state.groups.filter(function (x) { return x.id === state.att.groupId; })[0];
+      if (!g) return;
+      var member = getRoster(g)[Number(el.getAttribute('data-idx'))].name;
+      var status = el.getAttribute('data-status');
+      var records = state.att.records;
+      if (records[member] === status) delete records[member]; else records[member] = status;
+      state.att.dirty = true;
+      render(); return;
+    }
+    if (action === 'save-attendance') {
+      var gForSave = state.groups.filter(function (x) { return x.id === state.att.groupId; })[0];
+      var famTotal = gForSave ? (gForSave.familyMemberCount || 0) : 0;
+      var pv = parseInt((document.getElementById('family-present') || {}).value, 10); if (isNaN(pv) || pv < 0) pv = 0;
+      var av = parseInt((document.getElementById('family-absent') || {}).value, 10); if (isNaN(av) || av < 0) av = 0;
+      var ev = parseInt((document.getElementById('family-excused') || {}).value, 10); if (isNaN(ev) || ev < 0) ev = 0;
+      var gv = parseInt((document.getElementById('family-guest') || {}).value, 10); if (isNaN(gv) || gv < 0) gv = 0;
+      if (pv + av + ev > famTotal) { flash('Present + Absent + Excused can\u2019t add up to more than ' + famTotal + ' family members'); return; }
+      var records = Object.assign({}, state.att.records, { __familyPresent: pv, __familyAbsent: av, __familyExcused: ev, __familyGuest: gv });
+      state.att.records = records;
+      var key = state.att.groupId + '__' + state.att.date;
+      var next = Object.assign({}, state.attendance);
+      next[key] = records;
+      persistAttendance(next);
+      state.att.dirty = false;
+      flash('Attendance saved to this device');
+      return;
+    }
+
+    if (action === 'set-period') { state.rep.period = el.getAttribute('data-period'); render(); return; }
+    if (action === 'show-group-detail') { state.groupDetailId = el.getAttribute('data-id'); render(); return; }
+    if (action === 'close-group-detail') { state.groupDetailId = null; render(); return; }
+    if (action === 'sort-group') {
+      var gKey = el.getAttribute('data-key');
+      if (state.rep.groupSort.key === gKey) state.rep.groupSort.dir = state.rep.groupSort.dir === 'asc' ? 'desc' : 'asc';
+      else { state.rep.groupSort.key = gKey; state.rep.groupSort.dir = 'asc'; }
+      render(); return;
+    }
+    if (action === 'sort-member') {
+      var mKey = el.getAttribute('data-key');
+      if (state.rep.memberSort.key === mKey) state.rep.memberSort.dir = state.rep.memberSort.dir === 'asc' ? 'desc' : 'asc';
+      else { state.rep.memberSort.key = mKey; state.rep.memberSort.dir = 'asc'; }
+      render(); return;
+    }
+    if (action === 'export-excel') { exportExcelReport(); return; }
+
+    if (action === 'admin-edit') { state.admin.editId = el.getAttribute('data-id'); state.admin.errors = {}; state.admin.photoData = null; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    if (action === 'admin-cancel-edit') { state.admin.editId = null; state.admin.errors = {}; state.admin.photoData = null; render(); return; }
+    if (action === 'admin-delete-ask') { state.admin.confirmDeleteId = el.getAttribute('data-id'); render(); return; }
+    if (action === 'admin-delete-no') { state.admin.confirmDeleteId = null; render(); return; }
+    if (action === 'admin-delete-yes') {
+      var id = el.getAttribute('data-id');
+      persistGroups(state.groups.filter(function (g) { return g.id !== id; }));
+      state.admin.confirmDeleteId = null;
+      if (state.admin.editId === id) state.admin.editId = null;
+      flash('Dgroup removed');
+      return;
+    }
+    if (action === 'admin-submit') { submitAdminForm(); return; }
+    if (action === 'group-upload-photo') { var gf = document.getElementById('group-image-file'); if (gf) gf.click(); return; }
+    if (action === 'group-remove-photo') { state.admin.photoData = ''; render(); return; }
+    if (action === 'export-backup') { exportBackup(); return; }
+    if (action === 'import-backup') { var fi = document.getElementById('import-file'); if (fi) fi.click(); return; }
+
+    if (action === 'adminuser-edit') { state.adminUsers.editId = el.getAttribute('data-id'); state.adminUsers.errors = {}; render(); return; }
+    if (action === 'adminuser-cancel-edit') { state.adminUsers.editId = null; state.adminUsers.errors = {}; render(); return; }
+    if (action === 'adminuser-toggle-reveal') {
+      var revId = el.getAttribute('data-id');
+      state.adminUsers.revealId = state.adminUsers.revealId === revId ? null : revId;
+      render(); return;
+    }
+    if (action === 'adminuser-delete-ask') { state.adminUsers.confirmDeleteId = el.getAttribute('data-id'); render(); return; }
+    if (action === 'adminuser-delete-no') { state.adminUsers.confirmDeleteId = null; render(); return; }
+    if (action === 'adminuser-delete-yes') {
+      var delId = el.getAttribute('data-id');
+      if (state.admins.length <= 1) { flash('At least one administrator is required'); return; }
+      persistAdmins(state.admins.filter(function (a) { return a.id !== delId; }));
+      state.adminUsers.confirmDeleteId = null;
+      if (state.adminUsers.editId === delId) state.adminUsers.editId = null;
+      if (state.currentAdminId === delId) { state.isAdmin = false; state.currentAdminId = null; state.view = 'dashboard'; }
+      flash('Administrator removed');
+      render(); return;
+    }
+    if (action === 'adminuser-submit') { submitAdminUserForm(); return; }
+
+    if (action === 'story-edit') {
+      state.storyAdmin.editId = el.getAttribute('data-id');
+      state.storyAdmin.errors = {};
+      state.storyAdmin.draft = null;
+      var editingStory = state.stories.filter(function (s) { return s.id === state.storyAdmin.editId; })[0];
+      state.storyAdmin.images = editingStory && Array.isArray(editingStory.images) ? editingStory.images.slice() : [];
+      render(); window.scrollTo({ top: 0, behavior: 'smooth' }); return;
+    }
+    if (action === 'story-cancel-edit') { state.storyAdmin.editId = null; state.storyAdmin.errors = {}; state.storyAdmin.images = []; state.storyAdmin.draft = null; render(); return; }
+    if (action === 'story-delete-ask') { state.storyAdmin.confirmDeleteId = el.getAttribute('data-id'); render(); return; }
+    if (action === 'story-delete-no') { state.storyAdmin.confirmDeleteId = null; render(); return; }
+    if (action === 'story-delete-yes') {
+      var storyDelId = el.getAttribute('data-id');
+      persistStories(state.stories.filter(function (s) { return s.id !== storyDelId; }));
+      state.storyAdmin.confirmDeleteId = null;
+      if (state.storyAdmin.editId === storyDelId) { state.storyAdmin.editId = null; state.storyAdmin.images = []; state.storyAdmin.draft = null; }
+      flash('Story removed');
+      return;
+    }
+    if (action === 'story-upload-photo') { var sf = document.getElementById('story-image-file'); if (sf) sf.click(); return; }
+    if (action === 'story-remove-image') {
+      var rmIdx = Number(el.getAttribute('data-idx'));
+      state.storyAdmin.images.splice(rmIdx, 1);
+      captureStoryDraft();
+      render(); return;
+    }
+    if (action === 'story-submit') { submitStoryForm(); return; }
+    if (action === 'story-carousel-next') {
+      var sidN = el.getAttribute('data-id');
+      var storyN = state.stories.filter(function (s) { return s.id === sidN; })[0];
+      if (storyN && storyN.images && storyN.images.length > 0) {
+        storyCarouselIndex[sidN] = ((storyCarouselIndex[sidN] || 0) + 1) % storyN.images.length;
+        render();
+      }
+      return;
+    }
+    if (action === 'story-carousel-prev') {
+      var sidP = el.getAttribute('data-id');
+      var storyP = state.stories.filter(function (s) { return s.id === sidP; })[0];
+      if (storyP && storyP.images && storyP.images.length > 0) {
+        storyCarouselIndex[sidP] = ((storyCarouselIndex[sidP] || 0) - 1 + storyP.images.length) % storyP.images.length;
+        render();
+      }
+      return;
+    }
+    if (action === 'open-lightbox') {
+      var lbId = el.getAttribute('data-id');
+      var lbIdx = Number(el.getAttribute('data-idx')) || 0;
+      state.lightbox = { storyId: lbId, index: lbIdx };
+      render(); return;
+    }
+    if (action === 'close-lightbox') { state.lightbox = null; render(); return; }
+    if (action === 'lightbox-next') {
+      var lbStoryN = state.stories.filter(function (s) { return s.id === state.lightbox.storyId; })[0];
+      if (lbStoryN && lbStoryN.images && lbStoryN.images.length > 0) {
+        state.lightbox.index = (state.lightbox.index + 1) % lbStoryN.images.length;
+        render();
+      }
+      return;
+    }
+    if (action === 'lightbox-prev') {
+      var lbStoryP = state.stories.filter(function (s) { return s.id === state.lightbox.storyId; })[0];
+      if (lbStoryP && lbStoryP.images && lbStoryP.images.length > 0) {
+        state.lightbox.index = (state.lightbox.index - 1 + lbStoryP.images.length) % lbStoryP.images.length;
+        render();
+      }
+      return;
+    }
+    if (action === 'lightbox-noop') { return; }
+  }
+
+  function submitAdminForm() {
+    var name = (document.getElementById('admin-name') || {}).value || '';
+    var leader = (document.getElementById('admin-leader') || {}).value || '';
+    var schedule = (document.getElementById('admin-schedule') || {}).value || '';
+    var countRaw = (document.getElementById('admin-member-count') || {}).value || '';
+
+    var errors = {};
+    if (!name.trim()) errors.name = 'Dgroup name is required.';
+    if (!leader.trim()) errors.leader = 'Discipleship leader is required.';
+    if (SCHEDULE_OPTIONS.indexOf(schedule) === -1) errors.schedule = 'Choose a schedule.';
+    var count = parseInt(countRaw, 10);
+    if (countRaw.trim() === '' || isNaN(count) || count < 0) errors.familyMemberCount = 'Enter a valid number (0 or more).';
+    state.admin.errors = errors;
+    if (Object.keys(errors).length > 0) { render(); return; }
+
+    var editing = state.admin.editId !== null;
+    var existing = editing ? state.groups.filter(function (g) { return g.id === state.admin.editId; })[0] : null;
+    var photo = state.admin.photoData === '' ? null : (state.admin.photoData || (existing ? existing.photo : null));
+    var payload = {
+      id: state.admin.editId || uid(),
+      name: name.trim().toUpperCase(),
+      type: 'EFAD',
+      schedule: schedule,
+      leader: leader.trim().toUpperCase(),
+      familyMemberCount: count,
+      photo: photo,
+      members: existing && Array.isArray(existing.members) ? existing.members : []
+    };
+    var next = editing ? state.groups.map(function (g) { return g.id === payload.id ? payload : g; }) : state.groups.concat([payload]);
+    persistGroups(next);
+    state.admin.editId = null;
+    state.admin.errors = {};
+    state.admin.photoData = null;
+    flash(editing ? 'Dgroup updated' : 'Dgroup added');
+  }
+
+  function submitAdminUserForm() {
+    var name = (document.getElementById('adminuser-name') || {}).value || '';
+    var pin = (document.getElementById('adminuser-pin') || {}).value || '';
+    var editingId = state.adminUsers.editId;
+
+    var errors = {};
+    if (!name.trim()) errors.name = 'Name is required.';
+    if (!pin.trim() || pin.trim().length < 4) errors.pin = 'Password must be at least 4 characters.';
+    var duplicate = state.admins.filter(function (a) { return a.pin === pin.trim() && a.id !== editingId; })[0];
+    if (!errors.pin && duplicate) errors.pin = 'Another administrator already uses this PIN.';
+    state.adminUsers.errors = errors;
+    if (Object.keys(errors).length > 0) { render(); return; }
+
+    var payload = { id: editingId || uid(), name: name.trim(), pin: pin.trim() };
+    var editing = editingId !== null;
+    var next = editing ? state.admins.map(function (a) { return a.id === payload.id ? payload : a; }) : state.admins.concat([payload]);
+    persistAdmins(next);
+    state.adminUsers.editId = null;
+    state.adminUsers.errors = {};
+    flash(editing ? 'Administrator updated' : 'Administrator added');
+  }
+
+  function submitStoryForm() {
+    var title = (document.getElementById('story-title') || {}).value || '';
+    var category = (document.getElementById('story-category') || {}).value || 'family';
+    var groupId = (document.getElementById('story-group') || {}).value || '';
+    var caption = (document.getElementById('story-caption') || {}).value || '';
+
+    var errors = {};
+    if (!title.trim()) errors.title = 'Title is required.';
+    if (!caption.trim()) errors.caption = 'Story/update text is required.';
+    state.storyAdmin.errors = errors;
+    if (Object.keys(errors).length > 0) {
+      state.storyAdmin.draft = { title: title, category: category, groupId: groupId, caption: caption };
+      render(); return;
+    }
+
+    var editing = state.storyAdmin.editId !== null;
+    var existing = editing ? state.stories.filter(function (s) { return s.id === state.storyAdmin.editId; })[0] : null;
+    var payload = {
+      id: editing ? existing.id : uid(),
+      title: title.trim(),
+      category: category,
+      groupId: groupId || null,
+      caption: caption.trim(),
+      images: state.storyAdmin.images.slice(),
+      date: existing ? existing.date : todayISO(),
+      createdAt: existing ? existing.createdAt : new Date().toISOString()
+    };
+    var next = editing ? state.stories.map(function (s) { return s.id === payload.id ? payload : s; }) : state.stories.concat([payload]);
+    persistStories(next);
+    state.storyAdmin.editId = null;
+    state.storyAdmin.errors = {};
+    state.storyAdmin.images = [];
+    state.storyAdmin.draft = null;
+    flash(editing ? 'Story updated' : 'Story added');
+  }
+
+  function handleChange(e) {
+    var t = e.target;
+    if (t.id === 'hero-image-file') {
+      var imgFile = t.files && t.files[0];
+      t.value = '';
+      if (imgFile) handleHeroImageFile(imgFile);
+      return;
+    }
+    if (t.id === 'story-image-file') {
+      var storyImgFiles = Array.prototype.slice.call(t.files || []);
+      t.value = '';
+      if (storyImgFiles.length) handleStoryImageFiles(storyImgFiles);
+      return;
+    }
+    if (t.id === 'group-image-file') {
+      var groupImgFile = t.files && t.files[0];
+      t.value = '';
+      if (groupImgFile) handleGroupImageFile(groupImgFile);
+      return;
+    }
+    if (t.id === 'import-file') {
+      var file = t.files && t.files[0];
+      t.value = '';
+      if (file) importBackupFile(file);
+      return;
+    }
+    if (t.id === 'att-date') {
+      state.att.date = t.value;
+      state.att.records = state.attendance[state.att.groupId + '__' + t.value] || {};
+      state.att.dirty = false;
+      render(); return;
+    }
+    if (t.id === 'rep-week') { state.rep.week = t.value; render(); return; }
+    if (t.id === 'rep-month') { state.rep.month = t.value; render(); return; }
+    if (t.id === 'rep-year') { state.rep.year = t.value; render(); return; }
+    if (t.id === 'rep-group-filter') { state.rep.groupFilter = t.value; render(); return; }
+    if (t.id === 'rep-topn') { state.rep.topN = t.value; render(); return; }
+  }
+
+  document.addEventListener('click', handleClick);
+  document.addEventListener('change', handleChange);
+
+  render();
+})();
+</script>
+</body>
+</html>
