@@ -257,6 +257,144 @@
 <div id="app"></div>
 
 <script>
+// ── Firebase REST API layer — shares the SAME Firebase project as the
+//    Across Family Member Database, so EFAD's data is a real shared
+//    database instead of per-device local storage. No SDK needed.
+const FB_CONFIG = {
+  apiKey:    "AIzaSyATJVh52EaXgVXS0PfDd69Vv2C-luhveI8",
+  projectId: "across-family-ministry",
+  authDomain:"across-family-ministry.firebaseapp.com",
+};
+const FSBASE   = `https://firestore.googleapis.com/v1/projects/${FB_CONFIG.projectId}/databases/(default)/documents`;
+const AUTHBASE = `https://identitytoolkit.googleapis.com/v1`;
+
+window._idToken = null;
+window._refreshToken = null;
+window._authUser = null;
+
+// Session key is intentionally the SAME one the Membership Database uses
+// (both apps live on the same origin), so signing in on one signs you
+// into the other automatically.
+function _saveSession(){
+  try{
+    localStorage.setItem('across_session', JSON.stringify({
+      refreshToken: window._refreshToken,
+      email: window._authUser ? window._authUser.email : null,
+      uid: window._authUser ? window._authUser.uid : null
+    }));
+  }catch(e){}
+}
+async function _restoreSession(){
+  let saved;
+  try{ saved = JSON.parse(localStorage.getItem('across_session')||'null'); }catch(e){ saved = null; }
+  if(!saved || !saved.refreshToken) return false;
+  try{
+    const r = await fetch(`https://securetoken.googleapis.com/v1/token?key=${FB_CONFIG.apiKey}`,{
+      method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body: `grant_type=refresh_token&refresh_token=${encodeURIComponent(saved.refreshToken)}`
+    });
+    const d = await r.json();
+    if(d.error || !d.id_token) throw new Error('refresh failed');
+    window._idToken = d.id_token;
+    window._refreshToken = d.refresh_token;
+    window._authUser = {email:saved.email, uid:saved.user_id||saved.uid};
+    _saveSession();
+    return true;
+  } catch(e){
+    try{ localStorage.removeItem('across_session'); }catch(e2){}
+    return false;
+  }
+}
+
+window._auth = {
+  async signInWithEmailAndPassword(email, pass){
+    const r = await fetch(`${AUTHBASE}/accounts:signInWithPassword?key=${FB_CONFIG.apiKey}`,{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({email, password:pass, returnSecureToken:true})
+    });
+    const d = await r.json();
+    if(d.error) throw {code:'auth/invalid-credential', message:d.error.message};
+    window._idToken = d.idToken;
+    window._refreshToken = d.refreshToken;
+    window._authUser = {email:d.email, uid:d.localId};
+    _saveSession();
+    return {user: window._authUser};
+  },
+  async signOut(){
+    window._idToken = null; window._authUser = null; window._refreshToken = null;
+    try{ localStorage.removeItem('across_session'); }catch(e){}
+  }
+};
+
+// ── Firestore REST helpers (mirrors the Membership Database's pattern) ──
+function _toFS(val){
+  if(val === null || val === undefined) return {nullValue:null};
+  if(typeof val === 'string')  return {stringValue: val};
+  if(typeof val === 'number')  return {doubleValue: val};
+  if(typeof val === 'boolean') return {booleanValue: val};
+  if(Array.isArray(val))       return {arrayValue:{values: val.map(_toFS)}};
+  if(typeof val === 'object')  return {mapValue:{fields: Object.fromEntries(Object.entries(val).map(([k,v])=>[k,_toFS(v)]))}};
+  return {stringValue: String(val)};
+}
+function _fromFS(val){
+  if(!val) return null;
+  if('stringValue'  in val) return val.stringValue;
+  if('integerValue' in val) return Number(val.integerValue);
+  if('doubleValue'  in val) return Number(val.doubleValue);
+  if('booleanValue' in val) return val.booleanValue;
+  if('nullValue'    in val) return null;
+  if('arrayValue'   in val) return (val.arrayValue.values||[]).map(_fromFS);
+  if('mapValue'     in val) return Object.fromEntries(Object.entries(val.mapValue.fields||{}).map(([k,v])=>[k,_fromFS(v)]));
+  return null;
+}
+function _docToObj(doc){
+  const obj = {};
+  for(const [k,v] of Object.entries(doc.fields||{})) obj[k] = _fromFS(v);
+  obj.id = doc.name.split('/').pop();
+  return obj;
+}
+async function _fsFetch(path, opts, token){
+  const hdrs = Object.assign({'Content-Type':'application/json'}, (opts&&opts.headers)||{});
+  if(token) hdrs['Authorization'] = 'Bearer ' + token;
+  const r = await fetch(`${FSBASE}/${path}`, Object.assign({}, opts, {headers: hdrs}));
+  return r.json();
+}
+window._db = {
+  collection(col){
+    return {
+      async get(){
+        const data = await _fsFetch(`${col}?pageSize=1000`, {}, window._idToken);
+        const docs = (data.documents||[]).map(_docToObj);
+        return {docs, empty: docs.length===0};
+      },
+      async add(obj){
+        const fields = {};
+        for(const [k,v] of Object.entries(obj)) fields[k] = _toFS(v);
+        const data = await _fsFetch(col, {method:'POST', body:JSON.stringify({fields})}, window._idToken);
+        if(data.error) throw new Error(data.error.message);
+        return {id: (data.name||'').split('/').pop()};
+      },
+      doc(id){
+        return {
+          async update(obj){
+            const fields = {};
+            for(const [k,v] of Object.entries(obj)) fields[k] = _toFS(v);
+            const mask = Object.keys(obj).map(k=>`updateMask.fieldPaths=${encodeURIComponent(k)}`).join('&');
+            const data = await _fsFetch(`${col}/${id}?${mask}`, {method:'PATCH', body:JSON.stringify({fields})}, window._idToken);
+            if(data.error) throw new Error(data.error.message);
+          },
+          async delete(){
+            const data = await _fsFetch(`${col}/${id}`, {method:'DELETE'}, window._idToken);
+            if(data && data.error) throw new Error(data.error.message);
+          }
+        };
+      }
+    };
+  }
+};
+</script>
+
+<script>
 (function () {
   'use strict';
 
@@ -264,12 +402,6 @@
      Constants
   ------------------------------------------------------ */
   var SCHEDULE_OPTIONS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday', 'Flexible'];
-  var ADMIN_PIN = '2026';
-  var GROUPS_KEY = 'efad-groups-v1';
-  var ATTENDANCE_KEY = 'efad-attendance-v1';
-  var ADMINS_KEY = 'efad-admins-v1';
-  var HERO_IMAGE_KEY = 'efad-hero-image-v1';
-  var STORIES_KEY = 'efad-stories-v1';
   var FAMILY_IMAGE_URL = 'https://across.ccf.org.ph/wp-content/uploads/2024/09/portrait-of-a-family-on-vacation-2023-11-27-05-03-31-utc-Medium-1024x683.jpg';
   var STATUS = { present: 'Present', absent: 'Absent', excused: 'Excused' };
 
@@ -349,15 +481,6 @@
     return { start: yy + '-01-01', end: yy + '-12-31', label: String(yy) };
   }
 
-  function loadLocal(key, fallback) {
-    try { var raw = window.localStorage.getItem(key); return raw ? JSON.parse(raw) : fallback; }
-    catch (e) { return fallback; }
-  }
-  function saveLocal(key, value) {
-    try { window.localStorage.setItem(key, JSON.stringify(value)); return true; }
-    catch (e) { return false; }
-  }
-
   /* ------------------------------------------------------
      Icons (inline SVG strings)
   ------------------------------------------------------ */
@@ -395,39 +518,23 @@
   }
 
   /* ------------------------------------------------------
-     State
+     State — populated from Firestore asynchronously (see boot() near
+     the bottom of this file), not from localStorage.
   ------------------------------------------------------ */
-  var seededAdmins = loadLocal(ADMINS_KEY, null);
-  if (!seededAdmins || !Array.isArray(seededAdmins) || seededAdmins.length === 0) {
-    seededAdmins = [{ id: uid(), name: 'Administrator', pin: ADMIN_PIN }];
-    saveLocal(ADMINS_KEY, seededAdmins);
-  }
-
   var state = {
     view: 'dashboard',
-    groups: loadLocal(GROUPS_KEY, []).map(function (g) {
-      if (typeof g.familyMemberCount !== 'number') {
-        g.familyMemberCount = Array.isArray(g.members) ? g.members.length : 0;
-      }
-      if (!Array.isArray(g.members)) g.members = [];
-      return g;
-    }),
-    attendance: loadLocal(ATTENDANCE_KEY, {}),
-    admins: seededAdmins,
-    heroImage: loadLocal(HERO_IMAGE_KEY, null),
+    groups: [],
+    attendance: {},
+    heroImage: null,
     isAdmin: false,
-    currentAdminId: null,
+    currentAdminEmail: null,
     loginOpen: false,
-    pinError: '',
+    loginError: '',
     toast: null,
     dash: { selectedId: null },
     att: { groupId: null, date: todayISO(), records: {}, dirty: false },
     admin: { editId: null, errors: {}, confirmDeleteId: null, photoData: null },
-    adminUsers: { editId: null, errors: {}, confirmDeleteId: null, revealId: null },
-    stories: loadLocal(STORIES_KEY, []).map(function (s) {
-      if (!Array.isArray(s.images)) s.images = s.image ? [s.image] : [];
-      return s;
-    }),
+    stories: [],
     storyAdmin: { editId: null, errors: {}, confirmDeleteId: null, images: [], draft: null },
     groupDetailId: null,
     lightbox: null,
@@ -444,26 +551,58 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(function () { state.toast = null; render(); }, 2200);
   }
+
+  /* Each persist* function updates local state immediately (so the UI
+     feels instant), then syncs only what changed to Firestore in the
+     background. If that sync fails, a toast explains it — but the
+     screen already reflects the edit either way, so on failure the
+     safest recovery is simply reloading the page to re-sync from the
+     shared database. */
   function persistGroups(next) {
+    var prevIds = {}; state.groups.forEach(function (g) { prevIds[g.id] = true; });
+    var nextIds = {}; next.forEach(function (g) { nextIds[g.id] = true; });
+    var toDelete = Object.keys(prevIds).filter(function (id) { return !nextIds[id]; });
     state.groups = next;
-    if (!saveLocal(GROUPS_KEY, next)) flash('Could not save to this device');
+    Promise.all(
+      next.map(function (g) {
+        var payload = {}; Object.keys(g).forEach(function (k) { if (k !== 'id') payload[k] = g[k]; });
+        return _db.collection('efad_groups').doc(g.id).update(payload);
+      }).concat(toDelete.map(function (id) { return _db.collection('efad_groups').doc(id).delete(); }))
+    ).catch(function (e) { console.error(e); flash('Could not save to the shared database'); });
   }
   function persistAttendance(next) {
+    var prev = state.attendance;
+    var prevKeys = Object.keys(prev);
+    var nextKeys = Object.keys(next);
+    var toDelete = prevKeys.filter(function (k) { return nextKeys.indexOf(k) === -1; });
+    var toUpsert = nextKeys.filter(function (k) { return JSON.stringify(next[k]) !== JSON.stringify(prev[k]); });
     state.attendance = next;
-    if (!saveLocal(ATTENDANCE_KEY, next)) flash('Could not save to this device');
-  }
-  function persistAdmins(next) {
-    state.admins = next;
-    if (!saveLocal(ADMINS_KEY, next)) flash('Could not save to this device');
+    Promise.all(
+      toUpsert.map(function (k) { return _db.collection('efad_attendance').doc(k).update(next[k]); })
+        .concat(toDelete.map(function (k) { return _db.collection('efad_attendance').doc(k).delete(); }))
+    ).catch(function (e) { console.error(e); flash('Could not save to the shared database'); });
   }
   function persistHeroImage(dataUrl) {
     state.heroImage = dataUrl;
-    if (dataUrl === null) { try { window.localStorage.removeItem(HERO_IMAGE_KEY); } catch (e) {} return; }
-    if (!saveLocal(HERO_IMAGE_KEY, dataUrl)) flash('Could not save photo \u2014 it may be too large for this browser');
+    if (dataUrl === null) {
+      _db.collection('efad_settings').doc('hero').delete().catch(function () {});
+      return;
+    }
+    _db.collection('efad_settings').doc('hero').update({ image: dataUrl })
+      .catch(function (e) { console.error(e); flash('Could not save photo \u2014 it may be too large, or a connection issue'); });
   }
   function persistStories(next) {
+    var prevMap = {}; state.stories.forEach(function (s) { prevMap[s.id] = s; });
+    var nextIds = {}; next.forEach(function (s) { nextIds[s.id] = true; });
+    var toDelete = Object.keys(prevMap).filter(function (id) { return !nextIds[id]; });
+    var toUpsert = next.filter(function (s) { return JSON.stringify(s) !== JSON.stringify(prevMap[s.id]); });
     state.stories = next;
-    if (!saveLocal(STORIES_KEY, next)) flash('Could not save to this device');
+    Promise.all(
+      toUpsert.map(function (s) {
+        var payload = {}; Object.keys(s).forEach(function (k) { if (k !== 'id') payload[k] = s[k]; });
+        return _db.collection('efad_stories').doc(s.id).update(payload);
+      }).concat(toDelete.map(function (id) { return _db.collection('efad_stories').doc(id).delete(); }))
+    ).catch(function (e) { console.error(e); flash('Could not save to the shared database'); });
   }
 
   /* ------------------------------------------------------
@@ -497,7 +636,9 @@
       '<button class="navlink' + (v === 'stories' ? ' active' : '') + '" data-action="nav" data-view="stories">' + icon('newspaper', 17) + ' Stories</button>' +
       '<button class="navlink' + (v === 'admin' ? ' active' : '') + '" data-action="nav" data-view="admin">' + icon('shield', 17) + ' Admin Maintenance</button>' +
       '</div>' +
-      '<div class="signout-wrap' + (state.isAdmin ? ' show' : '') + '"><button class="signout" data-action="logout">' + icon('logout', 16) + ' Sign out of Admin</button></div>' +
+      '<div class="signout-wrap' + (state.isAdmin ? ' show' : '') + '">' +
+      (state.currentAdminEmail ? '<div class="muted" style="font-size:11px;padding:0 12px 4px">Signed in as ' + esc(state.currentAdminEmail) + '</div>' : '') +
+      '<button class="signout" data-action="logout">' + icon('logout', 16) + ' Sign out of Admin</button></div>' +
       '</nav>';
   }
   function markSvg() {
@@ -1156,15 +1297,15 @@
 
   function handleStoryImageFiles(fileList) {
     var files = Array.prototype.slice.call(fileList || []);
-    var room = Math.max(0, 8 - state.storyAdmin.images.length);
-    if (files.length > room) flash('You can add up to 8 photos per story');
+    var room = Math.max(0, 5 - state.storyAdmin.images.length);
+    if (files.length > room) flash('You can add up to 5 photos per story (shared database storage limit)');
     files.slice(0, room).forEach(function (file) {
       if (!/^image\//.test(file.type)) return;
       var reader = new FileReader();
       reader.onload = function (ev) {
         var img = new Image();
         img.onload = function () {
-          var maxW = 900;
+          var maxW = 640;
           var scale = Math.min(1, maxW / img.width);
           var w = Math.max(1, Math.round(img.width * scale));
           var h = Math.max(1, Math.round(img.height * scale));
@@ -1172,7 +1313,7 @@
           canvas.width = w; canvas.height = h;
           var ctx = canvas.getContext('2d');
           ctx.drawImage(img, 0, 0, w, h);
-          state.storyAdmin.images.push(canvas.toDataURL('image/jpeg', 0.82));
+          state.storyAdmin.images.push(canvas.toDataURL('image/jpeg', 0.65));
           captureStoryDraft();
           render();
         };
@@ -1209,7 +1350,7 @@
   }
 
   function exportBackup() {
-    var data = { app: 'efad-attendance-tracker', exportedAt: new Date().toISOString(), groups: state.groups, attendance: state.attendance, admins: state.admins, heroImage: state.heroImage || null, stories: state.stories };
+    var data = { app: 'efad-attendance-tracker', exportedAt: new Date().toISOString(), groups: state.groups, attendance: state.attendance, heroImage: state.heroImage || null, stories: state.stories };
     var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
@@ -1229,10 +1370,9 @@
         }
         persistGroups(data.groups);
         persistAttendance(data.attendance);
-        if (Array.isArray(data.admins) && data.admins.length > 0) persistAdmins(data.admins);
         if (typeof data.heroImage === 'string') persistHeroImage(data.heroImage);
         if (Array.isArray(data.stories)) persistStories(data.stories);
-        flash('Backup restored');
+        flash('Backup imported into the shared database');
         render();
       } catch (e) {
         flash('That file doesn\u2019t look like a valid EFAD backup');
@@ -1461,7 +1601,11 @@
     }
     out += '</div></div>';
     out += storiesAdminSection();
-    out += administratorsSection();
+    out += '<div style="margin-top:28px"><div class="card">' +
+      '<h2 class="serif" style="font-size:16px;font-weight:600;color:var(--ink);margin-bottom:4px">Administrators</h2>' +
+      '<p class="muted" style="font-size:13px">EFAD now shares its sign-in with the Across Family Member Database. ' +
+      'To add, edit, or remove an administrator, use the \u2699 Admins tab there \u2014 anyone added as an Administrator or Super Admin ' +
+      'automatically gets access to EFAD too, with the same email and password.</p></div></div>';
     return out;
   }
 
@@ -1494,7 +1638,7 @@
       field('Story / Update', '<textarea id="story-caption" rows="5" placeholder="Share what\u2019s happening\u2026">' + esc(vals.caption) + '</textarea>', { error: errs.caption, full: true }) +
       '</div>' +
       '<div style="margin-top:14px">' +
-      '<label style="display:block;font-size:12px;font-weight:600;color:var(--ink);margin-bottom:6px">Photos (optional, up to 8) \u2014 ' + images.length + ' / 8 added</label>' +
+      '<label style="display:block;font-size:12px;font-weight:600;color:var(--ink);margin-bottom:6px">Photos (optional, up to 5) \u2014 ' + images.length + ' / 5 added</label>' +
       (thumbsHtml ? '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">' + thumbsHtml + '</div>' : '') +
       '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
       '<button class="btn btn-ghost btn-sm" data-action="story-upload-photo">' + icon('camera', 13) + ' Add Photos</button>' +
@@ -1530,62 +1674,20 @@
     return out;
   }
 
-  function administratorsSection() {
-    var editing = state.adminUsers.editId !== null;
-    var editAdmin = editing ? state.admins.filter(function (a) { return a.id === state.adminUsers.editId; })[0] : null;
-    var vals = editAdmin ? { name: editAdmin.name, pin: editAdmin.pin } : { name: '', pin: '' };
-    var errs = state.adminUsers.errors;
-
-    var out = '<div style="margin-top:28px">' +
-      '<h2 class="serif" style="font-size:16px;font-weight:600;color:var(--ink);margin-bottom:4px">Administrators</h2>' +
-      '<p class="muted" style="font-size:13px;margin-bottom:14px">Anyone with a valid PIN below can open this Maintenance Menu. Keep at least one administrator at all times.</p>' +
-      '<div class="card">' +
-      '<div style="display:flex;align-items:center;justify-content:space-between">' +
-      '<h3 style="font-size:14.5px;font-weight:600;color:var(--ink);margin:0">' + (editing ? 'Edit Administrator' : 'Add an Administrator') + '</h3>' +
-      (editing ? '<button class="btn-text" data-action="adminuser-cancel-edit">Cancel edit</button>' : '') + '</div>' +
-      '<div class="form-grid">' +
-      field('Name', '<input type="text" id="adminuser-name" placeholder="e.g. Pastor Ana Reyes" value="' + esc(vals.name) + '"/>', { error: errs.name }) +
-      field('Password (PIN)', '<input type="password" id="adminuser-pin" placeholder="e.g. 4821" value="' + esc(vals.pin) + '"/>', { error: errs.pin, hint: 'At least 4 characters. Used to log in as this administrator.' }) +
-      '</div>' +
-      '<div style="display:flex;justify-content:flex-end;margin-top:14px">' +
-      '<button class="btn btn-primary" data-action="adminuser-submit">' + icon('key', 15) + ' ' + (editing ? 'Save changes' : 'Add Administrator') + '</button></div>' +
-      '</div>';
-
-    out += '<div style="margin-top:12px">';
-    state.admins.forEach(function (a) {
-      var deleting = state.adminUsers.confirmDeleteId === a.id;
-      var revealed = state.adminUsers.revealId === a.id;
-      var lastOne = state.admins.length <= 1;
-      out += '<div class="group-row"><div><div class="group-row-name">' + esc(a.name) + (a.id === state.currentAdminId ? ' <span class="leader-badge">You</span>' : '') + '</div>' +
-        '<div class="group-row-meta">PIN: ' + (revealed ? esc(a.pin) : '\u2022\u2022\u2022\u2022') +
-        ' &middot; <button class="btn-text" style="padding:0" data-action="adminuser-toggle-reveal" data-id="' + esc(a.id) + '">' + (revealed ? 'Hide' : 'Show') + '</button></div></div>' +
-        '<div class="row-actions">' +
-        '<button class="btn btn-ghost btn-sm" data-action="adminuser-edit" data-id="' + esc(a.id) + '">' + icon('pencil', 13) + ' Edit</button>' +
-        (lastOne ? '<span class="muted" style="font-size:11.5px">At least 1 required</span>' :
-          (deleting ?
-            '<span class="muted" style="font-size:12px">Delete?</span>' +
-            '<button class="btn btn-sm" style="background:var(--absent);color:#fff" data-action="adminuser-delete-yes" data-id="' + esc(a.id) + '">Yes</button>' +
-            '<button class="btn-text" data-action="adminuser-delete-no">No</button>'
-            : '<button class="btn-text" style="color:var(--absent)" data-action="adminuser-delete-ask" data-id="' + esc(a.id) + '">' + icon('trash', 13) + ' Delete</button>')) +
-        '</div></div>';
-    });
-    out += '</div></div>';
-    return out;
-  }
-
   /* ------------------------------------------------------
      Login modal + toast
   ------------------------------------------------------ */
   function loginModal() {
     return '<div class="modal-backdrop"><div class="modal">' +
       '<div class="modal-title">' + icon('shield', 19) + '<h2>Admin Access</h2></div>' +
-      '<p class="muted" style="font-size:13.5px;margin-bottom:14px">Enter an administrator PIN to open the Maintenance Menu.</p>' +
-      '<input type="password" inputmode="numeric" id="login-pin" placeholder="Enter PIN" autocomplete="off" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:10px 12px;outline:none"/>' +
-      (state.pinError ? '<p style="font-size:12px;margin-top:8px;color:var(--absent)">' + esc(state.pinError) + '</p>' : '') +
+      '<p class="muted" style="font-size:13.5px;margin-bottom:14px">Sign in with your Across Family Member Database administrator account.</p>' +
+      '<input type="email" id="login-email" placeholder="Email address" autocomplete="username" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:10px 12px;outline:none;margin-bottom:8px"/>' +
+      '<input type="password" id="login-password" placeholder="Password" autocomplete="current-password" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:10px 12px;outline:none"/>' +
+      (state.loginError ? '<p style="font-size:12px;margin-top:8px;color:var(--absent)">' + esc(state.loginError) + '</p>' : '') +
       '<div style="margin-top:18px;display:flex;gap:8px;justify-content:flex-end">' +
       '<button class="btn-text" data-action="login-cancel">Cancel</button>' +
-      '<button class="btn btn-primary" data-action="login-submit">Enter</button></div>' +
-      '<p class="muted" style="font-size:11px;margin-top:14px">Data is stored only in this browser on this device.</p>' +
+      '<button class="btn btn-primary" data-action="login-submit">Sign In</button></div>' +
+      '<p class="muted" style="font-size:11px;margin-top:14px">Same login as the Membership Database \u2014 any Administrator there can access EFAD.</p>' +
       '</div></div>';
   }
   function toastHtml() { return '<div class="toast">' + esc(state.toast) + '</div>'; }
@@ -1761,14 +1863,21 @@
      Actions
   ------------------------------------------------------ */
   function submitLogin() {
-    var pin = (document.getElementById('login-pin') || {}).value || '';
-    var match = state.admins.filter(function (a) { return a.pin === pin; })[0];
-    if (match) {
-      state.isAdmin = true; state.currentAdminId = match.id; state.loginOpen = false; state.pinError = ''; state.view = 'admin';
-    } else {
-      state.pinError = 'Incorrect PIN. Try again.';
-    }
-    render();
+    var email = (document.getElementById('login-email') || {}).value || '';
+    var pass = (document.getElementById('login-password') || {}).value || '';
+    if (!email.trim() || !pass) { state.loginError = 'Please enter email and password.'; render(); return; }
+    state.loginError = '';
+    _auth.signInWithEmailAndPassword(email.trim(), pass).then(function () {
+      state.isAdmin = true;
+      state.currentAdminEmail = window._authUser.email;
+      state.loginOpen = false;
+      state.loginError = '';
+      state.view = 'admin';
+      render();
+    }).catch(function () {
+      state.loginError = 'Invalid email or password.';
+      render();
+    });
   }
 
   function handleClick(e) {
@@ -1778,10 +1887,13 @@
 
     if (action === 'nav') {
       var view = el.getAttribute('data-view');
-      if (view === 'admin' && !state.isAdmin) { state.pinError = ''; state.loginOpen = true; render(); return; }
+      if (view === 'admin' && !state.isAdmin) { state.loginError = ''; state.loginOpen = true; render(); return; }
       state.view = view; render(); return;
     }
-    if (action === 'logout') { state.isAdmin = false; state.currentAdminId = null; state.view = 'dashboard'; flash('Signed out of Admin'); return; }
+    if (action === 'logout') {
+      _auth.signOut();
+      state.isAdmin = false; state.currentAdminEmail = null; state.view = 'dashboard'; flash('Signed out of Admin'); return;
+    }
     if (action === 'login-submit') { submitLogin(); return; }
     if (action === 'login-cancel') { state.loginOpen = false; render(); return; }
     if (action === 'change-hero-image') { if (!state.isAdmin) return; var hf = document.getElementById('hero-image-file'); if (hf) hf.click(); return; }
@@ -1853,27 +1965,6 @@
     if (action === 'group-remove-photo') { state.admin.photoData = ''; render(); return; }
     if (action === 'export-backup') { exportBackup(); return; }
     if (action === 'import-backup') { var fi = document.getElementById('import-file'); if (fi) fi.click(); return; }
-
-    if (action === 'adminuser-edit') { state.adminUsers.editId = el.getAttribute('data-id'); state.adminUsers.errors = {}; render(); return; }
-    if (action === 'adminuser-cancel-edit') { state.adminUsers.editId = null; state.adminUsers.errors = {}; render(); return; }
-    if (action === 'adminuser-toggle-reveal') {
-      var revId = el.getAttribute('data-id');
-      state.adminUsers.revealId = state.adminUsers.revealId === revId ? null : revId;
-      render(); return;
-    }
-    if (action === 'adminuser-delete-ask') { state.adminUsers.confirmDeleteId = el.getAttribute('data-id'); render(); return; }
-    if (action === 'adminuser-delete-no') { state.adminUsers.confirmDeleteId = null; render(); return; }
-    if (action === 'adminuser-delete-yes') {
-      var delId = el.getAttribute('data-id');
-      if (state.admins.length <= 1) { flash('At least one administrator is required'); return; }
-      persistAdmins(state.admins.filter(function (a) { return a.id !== delId; }));
-      state.adminUsers.confirmDeleteId = null;
-      if (state.adminUsers.editId === delId) state.adminUsers.editId = null;
-      if (state.currentAdminId === delId) { state.isAdmin = false; state.currentAdminId = null; state.view = 'dashboard'; }
-      flash('Administrator removed');
-      render(); return;
-    }
-    if (action === 'adminuser-submit') { submitAdminUserForm(); return; }
 
     if (action === 'story-edit') {
       state.storyAdmin.editId = el.getAttribute('data-id');
@@ -1982,28 +2073,6 @@
     flash(editing ? 'Dgroup updated' : 'Dgroup added');
   }
 
-  function submitAdminUserForm() {
-    var name = (document.getElementById('adminuser-name') || {}).value || '';
-    var pin = (document.getElementById('adminuser-pin') || {}).value || '';
-    var editingId = state.adminUsers.editId;
-
-    var errors = {};
-    if (!name.trim()) errors.name = 'Name is required.';
-    if (!pin.trim() || pin.trim().length < 4) errors.pin = 'Password must be at least 4 characters.';
-    var duplicate = state.admins.filter(function (a) { return a.pin === pin.trim() && a.id !== editingId; })[0];
-    if (!errors.pin && duplicate) errors.pin = 'Another administrator already uses this PIN.';
-    state.adminUsers.errors = errors;
-    if (Object.keys(errors).length > 0) { render(); return; }
-
-    var payload = { id: editingId || uid(), name: name.trim(), pin: pin.trim() };
-    var editing = editingId !== null;
-    var next = editing ? state.admins.map(function (a) { return a.id === payload.id ? payload : a; }) : state.admins.concat([payload]);
-    persistAdmins(next);
-    state.adminUsers.editId = null;
-    state.adminUsers.errors = {};
-    flash(editing ? 'Administrator updated' : 'Administrator added');
-  }
-
   function submitStoryForm() {
     var title = (document.getElementById('story-title') || {}).value || '';
     var category = (document.getElementById('story-category') || {}).value || 'family';
@@ -2082,7 +2151,62 @@
   document.addEventListener('click', handleClick);
   document.addEventListener('change', handleChange);
 
-  render();
+  function connectingScreen() {
+    return '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;color:var(--muted);font-size:13.5px">' +
+      '<div class="serif" style="font-size:18px;color:var(--ink);font-weight:600">EFAD Attendance Tracker</div>' +
+      '<div>Connecting to the shared database\u2026</div></div>';
+  }
+
+  async function boot() {
+    document.getElementById('app').innerHTML = connectingScreen();
+
+    var restored = false;
+    try { restored = await _restoreSession(); } catch (e) { restored = false; }
+
+    try {
+      var groupsSnap = await _db.collection('efad_groups').get();
+      state.groups = groupsSnap.docs.map(function (g) {
+        if (typeof g.familyMemberCount !== 'number') {
+          g.familyMemberCount = Array.isArray(g.members) ? g.members.length : 0;
+        }
+        if (!Array.isArray(g.members)) g.members = [];
+        return g;
+      });
+    } catch (e) { console.error('Could not load Dgroups', e); }
+
+    try {
+      var attSnap = await _db.collection('efad_attendance').get();
+      var attObj = {};
+      attSnap.docs.forEach(function (d) {
+        var key = d.id; var records = {};
+        Object.keys(d).forEach(function (k) { if (k !== 'id') records[k] = d[k]; });
+        attObj[key] = records;
+      });
+      state.attendance = attObj;
+    } catch (e) { console.error('Could not load attendance', e); }
+
+    try {
+      var storiesSnap = await _db.collection('efad_stories').get();
+      state.stories = storiesSnap.docs.map(function (s) {
+        if (!Array.isArray(s.images)) s.images = s.image ? [s.image] : [];
+        return s;
+      });
+    } catch (e) { console.error('Could not load stories', e); }
+
+    try {
+      var heroSnap = await _fsFetch('efad_settings/hero', {}, window._idToken);
+      if (!heroSnap.error) { var heroObj = _docToObj(heroSnap); state.heroImage = heroObj.image || null; }
+    } catch (e) { /* no hero photo set yet */ }
+
+    if (restored && window._authUser) {
+      state.isAdmin = true;
+      state.currentAdminEmail = window._authUser.email;
+    }
+
+    render();
+  }
+
+  boot();
 })();
 </script>
 </body>
