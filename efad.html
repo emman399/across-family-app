@@ -357,35 +357,66 @@ async function _fsFetch(path, opts, token){
   const hdrs = Object.assign({'Content-Type':'application/json'}, (opts&&opts.headers)||{});
   if(token) hdrs['Authorization'] = 'Bearer ' + token;
   const r = await fetch(`${FSBASE}/${path}`, Object.assign({}, opts, {headers: hdrs}));
-  return r.json();
+  const text = await r.text();
+  let data;
+  try { data = text ? JSON.parse(text) : {}; } catch(e) { data = {}; }
+  if(!r.ok && !data.error) data.error = { message: `HTTP ${r.status}${text ? ': ' + text.slice(0,200) : ''}` };
+  return data;
+}
+// Firestore field-path syntax: a name with anything other than plain
+// letters/digits/underscore must be wrapped in backticks, or the request
+// is rejected outright — this bit us with leader names containing spaces.
+function _fieldPath(name){
+  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(name) ? name : '`' + name.replace(/`/g,'\\`') + '`';
+}
+// If a write fails because the signed-in session's token has gone stale,
+// silently refresh it once (via the stored refresh token) and retry —
+// avoids forcing a re-login just because a tab was left open a while.
+async function _withAuthRetry(fn){
+  try { return await fn(); }
+  catch(e){
+    const msg = (e && e.message || '').toLowerCase();
+    if((msg.includes('permission') || msg.includes('unauthenticated') || msg.includes('401') || msg.includes('403')) && window._refreshToken){
+      const ok = await _restoreSession();
+      if(ok) return await fn();
+    }
+    throw e;
+  }
 }
 window._db = {
   collection(col){
     return {
       async get(){
         const data = await _fsFetch(`${col}?pageSize=1000`, {}, window._idToken);
+        if(data.error) throw new Error(data.error.message);
         const docs = (data.documents||[]).map(_docToObj);
         return {docs, empty: docs.length===0};
       },
       async add(obj){
-        const fields = {};
-        for(const [k,v] of Object.entries(obj)) fields[k] = _toFS(v);
-        const data = await _fsFetch(col, {method:'POST', body:JSON.stringify({fields})}, window._idToken);
-        if(data.error) throw new Error(data.error.message);
-        return {id: (data.name||'').split('/').pop()};
+        return _withAuthRetry(async () => {
+          const fields = {};
+          for(const [k,v] of Object.entries(obj)) fields[k] = _toFS(v);
+          const data = await _fsFetch(col, {method:'POST', body:JSON.stringify({fields})}, window._idToken);
+          if(data.error) throw new Error(data.error.message);
+          return {id: (data.name||'').split('/').pop()};
+        });
       },
       doc(id){
         return {
           async update(obj){
-            const fields = {};
-            for(const [k,v] of Object.entries(obj)) fields[k] = _toFS(v);
-            const mask = Object.keys(obj).map(k=>`updateMask.fieldPaths=${encodeURIComponent(k)}`).join('&');
-            const data = await _fsFetch(`${col}/${id}?${mask}`, {method:'PATCH', body:JSON.stringify({fields})}, window._idToken);
-            if(data.error) throw new Error(data.error.message);
+            return _withAuthRetry(async () => {
+              const fields = {};
+              for(const [k,v] of Object.entries(obj)) fields[k] = _toFS(v);
+              const mask = Object.keys(obj).map(k=>`updateMask.fieldPaths=${encodeURIComponent(_fieldPath(k))}`).join('&');
+              const data = await _fsFetch(`${col}/${id}?${mask}`, {method:'PATCH', body:JSON.stringify({fields})}, window._idToken);
+              if(data.error) throw new Error(data.error.message);
+            });
           },
           async delete(){
-            const data = await _fsFetch(`${col}/${id}`, {method:'DELETE'}, window._idToken);
-            if(data && data.error) throw new Error(data.error.message);
+            return _withAuthRetry(async () => {
+              const data = await _fsFetch(`${col}/${id}`, {method:'DELETE'}, window._idToken);
+              if(data && data.error) throw new Error(data.error.message);
+            });
           }
         };
       }
@@ -568,7 +599,7 @@ window._db = {
         var payload = {}; Object.keys(g).forEach(function (k) { if (k !== 'id') payload[k] = g[k]; });
         return _db.collection('efad_groups').doc(g.id).update(payload);
       }).concat(toDelete.map(function (id) { return _db.collection('efad_groups').doc(id).delete(); }))
-    ).catch(function (e) { console.error(e); flash('Could not save to the shared database'); });
+    ).catch(function (e) { console.error(e); flash('Could not save: ' + (e && e.message ? e.message : 'connection issue')); });
   }
   function persistAttendance(next) {
     var prev = state.attendance;
@@ -580,7 +611,7 @@ window._db = {
     Promise.all(
       toUpsert.map(function (k) { return _db.collection('efad_attendance').doc(k).update(next[k]); })
         .concat(toDelete.map(function (k) { return _db.collection('efad_attendance').doc(k).delete(); }))
-    ).catch(function (e) { console.error(e); flash('Could not save to the shared database'); });
+    ).catch(function (e) { console.error(e); flash('Could not save: ' + (e && e.message ? e.message : 'connection issue')); });
   }
   function persistHeroImage(dataUrl) {
     state.heroImage = dataUrl;
@@ -589,7 +620,7 @@ window._db = {
       return;
     }
     _db.collection('efad_settings').doc('hero').update({ image: dataUrl })
-      .catch(function (e) { console.error(e); flash('Could not save photo \u2014 it may be too large, or a connection issue'); });
+      .catch(function (e) { console.error(e); flash('Could not save photo: ' + (e && e.message ? e.message : 'connection issue')); });
   }
   function persistStories(next) {
     var prevMap = {}; state.stories.forEach(function (s) { prevMap[s.id] = s; });
@@ -602,7 +633,7 @@ window._db = {
         var payload = {}; Object.keys(s).forEach(function (k) { if (k !== 'id') payload[k] = s[k]; });
         return _db.collection('efad_stories').doc(s.id).update(payload);
       }).concat(toDelete.map(function (id) { return _db.collection('efad_stories').doc(id).delete(); }))
-    ).catch(function (e) { console.error(e); flash('Could not save to the shared database'); });
+    ).catch(function (e) { console.error(e); flash('Could not save: ' + (e && e.message ? e.message : 'connection issue')); });
   }
 
   /* ------------------------------------------------------
@@ -898,9 +929,9 @@ window._db = {
     var famUnmarked = Math.max(0, famTotal - (fam.present + fam.absent + fam.excused));
 
     var counts = { present: 0, absent: 0, excused: 0, guest: 0 };
-    roster.forEach(function (person) { if (counts[records[person.name]] !== undefined) counts[records[person.name]]++; });
+    if (records.__leaderStatus && counts[records.__leaderStatus] !== undefined) counts[records.__leaderStatus]++;
     counts.present += fam.present; counts.absent += fam.absent; counts.excused += fam.excused; counts.guest += fam.guest;
-    var leaderUnmarked = roster.filter(function (person) { return !records[person.name]; }).length;
+    var leaderUnmarked = roster.filter(function () { return !records.__leaderStatus; }).length;
     var unmarked = leaderUnmarked + famUnmarked;
 
     var rows;
@@ -908,7 +939,7 @@ window._db = {
       rows = '<div style="padding:24px;text-align:center;font-size:13.5px" class="muted">This group has no leader yet. Add one from the Admin Maintenance Menu.</div>';
     } else {
       rows = roster.map(function (person, idx) {
-        var st = records[person.name];
+        var st = records.__leaderStatus;
         var btns = Object.keys(STATUS).map(function (key) {
           return '<button class="status-btn' + (st === key ? ' active-' + key : '') + '" data-action="set-status" data-idx="' + idx + '" data-status="' + key + '" title="' + STATUS[key] + '">' + STATUS[key][0] + '</button>';
         }).join('');
@@ -979,7 +1010,7 @@ window._db = {
         var m = person.name;
         var present = 0, absent = 0, excused = 0;
         entries.filter(function (e) { return e.groupId === g.id; }).forEach(function (e) {
-          var s = e.records[m];
+          var s = e.records.__leaderStatus;
           if (s === 'present') present++; else if (s === 'absent') absent++; else if (s === 'excused') excused++;
         });
         var marked = present + absent + excused;
@@ -1701,7 +1732,7 @@ window._db = {
     }).filter(function (e) { return e.groupId === g.id; }).sort(function (a, b) { return b.date.localeCompare(a.date); });
 
     var rows = sessions.map(function (e) {
-      var leaderStatus = g.leader ? e.records[g.leader] : null;
+      var leaderStatus = e.records.__leaderStatus || null;
       var present = (e.records.__familyPresent || 0) + (leaderStatus === 'present' ? 1 : 0);
       var absent = (e.records.__familyAbsent || 0) + (leaderStatus === 'absent' ? 1 : 0);
       var excused = (e.records.__familyExcused || 0) + (leaderStatus === 'excused' ? 1 : 0);
@@ -1905,10 +1936,9 @@ window._db = {
     if (action === 'set-status') {
       var g = state.groups.filter(function (x) { return x.id === state.att.groupId; })[0];
       if (!g) return;
-      var member = getRoster(g)[Number(el.getAttribute('data-idx'))].name;
       var status = el.getAttribute('data-status');
       var records = state.att.records;
-      if (records[member] === status) delete records[member]; else records[member] = status;
+      if (records.__leaderStatus === status) delete records.__leaderStatus; else records.__leaderStatus = status;
       state.att.dirty = true;
       render(); return;
     }
