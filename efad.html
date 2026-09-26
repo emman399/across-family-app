@@ -569,7 +569,7 @@ window._db = {
     storyAdmin: { editId: null, errors: {}, confirmDeleteId: null, images: [], draft: null },
     groupDetailId: null,
     lightbox: null,
-    rep: { period: 'weekly', week: defaultWeekValue(), month: defaultMonthValue(), year: defaultYearValue(), groupFilter: 'all', groupSort: { key: 'name', dir: 'asc' }, memberSort: { key: 'group', dir: 'asc' }, topN: '5' }
+    rep: { period: 'weekly', week: defaultWeekValue(), month: defaultMonthValue(), year: defaultYearValue(), groupFilter: 'all', groupSort: { key: 'name', dir: 'asc' }, memberSort: { key: 'group', dir: 'asc' }, topN: '5', mcYear: defaultYearValue(), mcMonth: 'all' }
   };
   var toastTimer = null;
   var storyCarouselIndex = {};
@@ -1112,6 +1112,8 @@ window._db = {
 
       out += topDgroupsCard(meetingsByGroup, rep.topN);
 
+      out += meetingCountCard(groups, yearOptions, rep.mcYear, rep.mcMonth);
+
       out += '<div class="card table-card" style="padding:0"><div class="table-head"><span class="table-head-title">' + icon('bar', 15) + '<h2>By Dgroup \u2014 ' + esc(range.label) + '</h2></span>' +
         '<div class="table-search">' + icon('search', 14) + '<input type="text" id="search-group-table" placeholder="Search Dgroups" autocomplete="off"/></div></div>';
       if (groupRows.length === 0) {
@@ -1171,6 +1173,53 @@ window._db = {
   }
   function summaryCard(label, value, color) {
     return '<div class="summary-card"><div class="summary-label">' + esc(label) + '</div><div class="summary-value serif" style="color:' + color + '">' + value + '</div></div>';
+  }
+
+  var MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+  function meetingCountCard(groups, yearOptions, mcYear, mcMonth) {
+    var startDate, endDate;
+    if (mcMonth === 'all') {
+      startDate = mcYear + '-01-01'; endDate = mcYear + '-12-31';
+    } else {
+      var mm = pad2(Number(mcMonth));
+      var lastDay = new Date(Number(mcYear), Number(mcMonth), 0).getDate();
+      startDate = mcYear + '-' + mm + '-01'; endDate = mcYear + '-' + mm + '-' + pad2(lastDay);
+    }
+    var counts = {};
+    Object.keys(state.attendance).forEach(function (k) {
+      var parts = k.split('__'); var gid = parts[0]; var date = parts[1];
+      if (date >= startDate && date <= endDate) counts[gid] = (counts[gid] || 0) + 1;
+    });
+    var rows = groups.map(function (g) {
+      return { id: g.id, name: g.name, count: counts[g.id] || 0 };
+    }).sort(function (a, b) { if (b.count !== a.count) return b.count - a.count; return a.name.localeCompare(b.name); });
+
+    var yearSelect = '<select id="mc-year" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12.5px;background:#fff">' +
+      yearOptions.map(function (y) { return '<option value="' + y + '"' + (String(y) === String(mcYear) ? ' selected' : '') + '>' + y + '</option>'; }).join('') + '</select>';
+    var monthSelect = '<select id="mc-month" style="border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12.5px;background:#fff">' +
+      '<option value="all"' + (mcMonth === 'all' ? ' selected' : '') + '>All Months</option>' +
+      MONTH_NAMES.map(function (name, idx) { var val = String(idx + 1); return '<option value="' + val + '"' + (mcMonth === val ? ' selected' : '') + '>' + name + '</option>'; }).join('') +
+      '</select>';
+
+    var body;
+    if (rows.length === 0) {
+      body = '<p class="muted" style="font-size:13px;text-align:center;padding:16px 0">No Dgroups yet.</p>';
+    } else {
+      body = '<div style="margin-top:10px;display:flex;flex-direction:column;gap:6px">' +
+        rows.map(function (r) {
+          return '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:8px;background:rgba(0,0,0,0.03)">' +
+            '<button class="btn-text" style="padding:0;font-weight:600;color:var(--ink);font-size:13.5px" data-action="show-group-detail" data-id="' + esc(r.id) + '">' + esc(r.name) + '</button>' +
+            '<span style="font-size:13px;font-weight:700;color:var(--ink)">' + r.count + '</span>' +
+            '</div>';
+        }).join('') + '</div>';
+    }
+
+    return '<div class="card chart-card"><div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">' +
+      '<div class="chart-title" style="margin-bottom:0">' + icon('calendar', 15) + ' Meeting Count by Dgroup</div>' +
+      '<div style="display:flex;gap:8px">' + yearSelect + monthSelect + '</div></div>' +
+      '<p class="muted" style="font-size:11.5px;margin-top:6px">How many times each Dgroup met in ' + (mcMonth === 'all' ? 'all of ' + mcYear : MONTH_NAMES[Number(mcMonth) - 1] + ' ' + mcYear) + '.</p>' +
+      body + '</div>';
   }
 
   function topDgroupsCard(rows, topN) {
@@ -2201,6 +2250,8 @@ window._db = {
     if (t.id === 'rep-year') { state.rep.year = t.value; render(); return; }
     if (t.id === 'rep-group-filter') { state.rep.groupFilter = t.value; render(); return; }
     if (t.id === 'rep-topn') { state.rep.topN = t.value; render(); return; }
+    if (t.id === 'mc-year') { state.rep.mcYear = t.value; render(); return; }
+    if (t.id === 'mc-month') { state.rep.mcMonth = t.value; render(); return; }
   }
 
   document.addEventListener('click', handleClick);
