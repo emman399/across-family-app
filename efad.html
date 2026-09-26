@@ -660,7 +660,7 @@ window._db = {
     var v = state.view;
     return '' +
       '<nav class="sidebar">' +
-      '<div class="brand"><span class="ink">' + markSvg() + '</span><div><div class="brand-name">EFAD</div><div class="brand-sub">Every Family A Discipleship Group</div></div></div>' +
+      '<div class="brand"><span class="ink">' + markSvg() + '</span><div><div class="brand-name">EFAD</div><div class="brand-sub">Every Family Discipling</div></div></div>' +
       '<div class="navlinks">' +
       '<button class="navlink' + (v === 'dashboard' ? ' active' : '') + '" data-action="nav" data-view="dashboard">' + icon('grid', 17) + ' Dashboard</button>' +
       '<button class="navlink' + (v === 'reports' ? ' active' : '') + '" data-action="nav" data-view="reports">' + icon('bar', 17) + ' Reports</button>' +
@@ -822,8 +822,8 @@ window._db = {
       '<img src="' + heroSrc + '" alt="A family together \u2014 CCF Across Family Ministry" loading="lazy"/>' +
       '<div class="hero-overlay"></div><div class="hero-text">' +
       '<span class="hero-eyebrow">CCF Across Family Ministry</span>' +
-      '<h1 class="hero-title">Every Family A Discipleship Group</h1>' +
-      '<p class="hero-sub">Helping every family build a rhythm of discipleship, together.</p></div>' +
+      '<h1 class="hero-title">Every Family Discipling</h1>' +
+      '<p class="hero-sub">The home is the first discipleship center.</p></div>' +
       (canEditHero ? '<span class="hero-change-badge">' + icon('camera', 13) + ' Tap to change photo</span>' : '') +
       (canEditHero ? '<input type="file" id="hero-image-file" accept="image/*" style="display:none"/>' : '') +
       '</div>' +
@@ -1614,9 +1614,11 @@ window._db = {
     if (state.groups.length === 0) {
       out += emptyState('No Dgroups yet', 'Use the form above to add your first EFAD group.');
     } else {
+      out += '<div class="search-wrap" style="max-width:320px;margin-bottom:14px">' + icon('search', 16) + '<input type="text" id="admin-group-search" placeholder="Search Dgroups by name or leader" autocomplete="off"/></div>';
+      out += '<div id="admin-group-list">';
       out += state.groups.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).map(function (g) {
         var deleting = state.admin.confirmDeleteId === g.id;
-        return '<div class="group-row">' +
+        return '<div class="group-row" data-search="' + esc((g.name + ' ' + g.leader).toLowerCase()) + '">' +
           (g.photo ? '<img src="' + g.photo + '" style="width:40px;height:40px;border-radius:50%;object-fit:cover"/>' : '') +
           '<div style="flex:1;min-width:140px"><div class="group-row-name">' + esc(g.name) + '</div>' +
           '<div class="group-row-meta">EFAD \u00b7 ' + esc(g.schedule) + ' \u00b7 Leader: ' + esc(g.leader) + ' \u00b7 ' + g.familyMemberCount + ' member' + (g.familyMemberCount === 1 ? '' : 's') + '</div></div>' +
@@ -1629,6 +1631,8 @@ window._db = {
             : '<button class="btn-text" style="color:var(--absent)" data-action="admin-delete-ask" data-id="' + esc(g.id) + '">' + icon('trash', 13) + ' Delete</button>') +
           '</div></div>';
       }).join('');
+      out += '</div>';
+      out += '<p class="muted hidden" id="admin-group-no-match" style="font-size:13px;padding:12px 2px">No Dgroups match your search.</p>';
     }
     out += '</div></div>';
     out += storiesAdminSection();
@@ -1851,6 +1855,21 @@ window._db = {
         });
         var noMatch = document.getElementById('story-no-match');
         if (noMatch) noMatch.classList.toggle('hidden', anyVisible || cards.length === 0);
+      });
+    }
+    var adminGroupSearch = document.getElementById('admin-group-search');
+    if (adminGroupSearch) {
+      adminGroupSearch.addEventListener('input', function () {
+        var q = adminGroupSearch.value.trim().toLowerCase();
+        var rows = document.querySelectorAll('#admin-group-list .group-row');
+        var anyVisible = false;
+        rows.forEach(function (row) {
+          var match = !q || (row.getAttribute('data-search') || '').indexOf(q) !== -1;
+          row.classList.toggle('hidden', !match);
+          if (match) anyVisible = true;
+        });
+        var noMatch = document.getElementById('admin-group-no-match');
+        if (noMatch) noMatch.classList.toggle('hidden', anyVisible || rows.length === 0);
       });
     }
     var groupTableSearch = document.getElementById('search-group-table');
