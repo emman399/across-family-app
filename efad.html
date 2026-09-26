@@ -589,30 +589,37 @@ window._db = {
      screen already reflects the edit either way, so on failure the
      safest recovery is simply reloading the page to re-sync from the
      shared database. */
-  function persistGroups(next) {
-    var prevIds = {}; state.groups.forEach(function (g) { prevIds[g.id] = true; });
-    var nextIds = {}; next.forEach(function (g) { nextIds[g.id] = true; });
-    var toDelete = Object.keys(prevIds).filter(function (id) { return !nextIds[id]; });
-    state.groups = next;
-    Promise.all(
-      next.map(function (g) {
-        var payload = {}; Object.keys(g).forEach(function (k) { if (k !== 'id') payload[k] = g[k]; });
-        return _db.collection('efad_groups').doc(g.id).update(payload);
-      }).concat(toDelete.map(function (id) { return _db.collection('efad_groups').doc(id).delete(); }))
-    ).catch(function (e) { console.error(e); flash('Could not save: ' + (e && e.message ? e.message : 'connection issue')); });
+  /* Each of these touches ONE document at a time — never a whole-array
+     diff — so one browser tab can never delete data it simply doesn't
+     happen to have loaded yet (e.g. something another admin added a
+     moment ago on their own device). That whole-array-diff approach was
+     the actual cause of data disappearing after an Import Backup. */
+  function upsertGroup(g) {
+    var idx = state.groups.findIndex(function (x) { return x.id === g.id; });
+    if (idx === -1) state.groups.push(g); else state.groups[idx] = g;
+    var payload = {}; Object.keys(g).forEach(function (k) { if (k !== 'id') payload[k] = g[k]; });
+    _db.collection('efad_groups').doc(g.id).update(payload)
+      .catch(function (e) { console.error(e); flash('Could not save: ' + (e && e.message ? e.message : 'connection issue')); });
   }
-  function persistAttendance(next) {
-    var prev = state.attendance;
-    var prevKeys = Object.keys(prev);
-    var nextKeys = Object.keys(next);
-    var toDelete = prevKeys.filter(function (k) { return nextKeys.indexOf(k) === -1; });
-    var toUpsert = nextKeys.filter(function (k) { return JSON.stringify(next[k]) !== JSON.stringify(prev[k]); });
-    state.attendance = next;
-    Promise.all(
-      toUpsert.map(function (k) { return _db.collection('efad_attendance').doc(k).update(next[k]); })
-        .concat(toDelete.map(function (k) { return _db.collection('efad_attendance').doc(k).delete(); }))
-    ).catch(function (e) { console.error(e); flash('Could not save: ' + (e && e.message ? e.message : 'connection issue')); });
+  function deleteGroupById(id) {
+    state.groups = state.groups.filter(function (g) { return g.id !== id; });
+    _db.collection('efad_groups').doc(id).delete()
+      .catch(function (e) { console.error(e); flash('Could not delete: ' + (e && e.message ? e.message : 'connection issue')); });
   }
+  function mergeGroupsFromImport(importedGroups) {
+    importedGroups.forEach(function (g) { upsertGroup(g); });
+  }
+
+  function upsertAttendanceRecord(key, records) {
+    state.attendance = Object.assign({}, state.attendance);
+    state.attendance[key] = records;
+    _db.collection('efad_attendance').doc(key).update(records)
+      .catch(function (e) { console.error(e); flash('Could not save: ' + (e && e.message ? e.message : 'connection issue')); });
+  }
+  function mergeAttendanceFromImport(importedObj) {
+    Object.keys(importedObj).forEach(function (k) { upsertAttendanceRecord(k, importedObj[k]); });
+  }
+
   function persistHeroImage(dataUrl) {
     state.heroImage = dataUrl;
     if (dataUrl === null) {
@@ -622,18 +629,21 @@ window._db = {
     _db.collection('efad_settings').doc('hero').update({ image: dataUrl })
       .catch(function (e) { console.error(e); flash('Could not save photo: ' + (e && e.message ? e.message : 'connection issue')); });
   }
-  function persistStories(next) {
-    var prevMap = {}; state.stories.forEach(function (s) { prevMap[s.id] = s; });
-    var nextIds = {}; next.forEach(function (s) { nextIds[s.id] = true; });
-    var toDelete = Object.keys(prevMap).filter(function (id) { return !nextIds[id]; });
-    var toUpsert = next.filter(function (s) { return JSON.stringify(s) !== JSON.stringify(prevMap[s.id]); });
-    state.stories = next;
-    Promise.all(
-      toUpsert.map(function (s) {
-        var payload = {}; Object.keys(s).forEach(function (k) { if (k !== 'id') payload[k] = s[k]; });
-        return _db.collection('efad_stories').doc(s.id).update(payload);
-      }).concat(toDelete.map(function (id) { return _db.collection('efad_stories').doc(id).delete(); }))
-    ).catch(function (e) { console.error(e); flash('Could not save: ' + (e && e.message ? e.message : 'connection issue')); });
+
+  function upsertStory(s) {
+    var idx = state.stories.findIndex(function (x) { return x.id === s.id; });
+    if (idx === -1) state.stories.push(s); else state.stories[idx] = s;
+    var payload = {}; Object.keys(s).forEach(function (k) { if (k !== 'id') payload[k] = s[k]; });
+    _db.collection('efad_stories').doc(s.id).update(payload)
+      .catch(function (e) { console.error(e); flash('Could not save: ' + (e && e.message ? e.message : 'connection issue')); });
+  }
+  function deleteStoryById(id) {
+    state.stories = state.stories.filter(function (s) { return s.id !== id; });
+    _db.collection('efad_stories').doc(id).delete()
+      .catch(function (e) { console.error(e); flash('Could not delete: ' + (e && e.message ? e.message : 'connection issue')); });
+  }
+  function mergeStoriesFromImport(importedStories) {
+    importedStories.forEach(function (s) { upsertStory(s); });
   }
 
   /* ------------------------------------------------------
@@ -1399,11 +1409,11 @@ window._db = {
         if (!data || !Array.isArray(data.groups) || typeof data.attendance !== 'object' || data.attendance === null) {
           throw new Error('invalid');
         }
-        persistGroups(data.groups);
-        persistAttendance(data.attendance);
+        mergeGroupsFromImport(data.groups);
+        mergeAttendanceFromImport(data.attendance);
         if (typeof data.heroImage === 'string') persistHeroImage(data.heroImage);
-        if (Array.isArray(data.stories)) persistStories(data.stories);
-        flash('Backup imported into the shared database');
+        if (Array.isArray(data.stories)) mergeStoriesFromImport(data.stories);
+        flash('Backup merged into the shared database (nothing already there was removed)');
         render();
       } catch (e) {
         flash('That file doesn\u2019t look like a valid EFAD backup');
@@ -1577,7 +1587,7 @@ window._db = {
       '<p class="muted" style="font-size:13.5px;margin-top:4px">Add and manage EFAD discipleship groups.</p>' +
       '<div class="card" style="margin-top:20px">' +
       '<h2 class="serif" style="font-size:16px;font-weight:600;color:var(--ink)">Backup & Restore</h2>' +
-      '<p class="muted" style="font-size:13px;margin-top:4px">Your data lives only in this browser, on this device. If you switch to an updated copy of this file, export a backup first, then import it into the new copy so nothing is lost.</p>' +
+      '<p class="muted" style="font-size:13px;margin-top:4px">Data lives in the shared database, not this device \u2014 every admin sees the same Dgroups and attendance. Export Backup downloads a snapshot for safekeeping. Import Backup only adds or updates what\u2019s in the file \u2014 it will never remove anything already in the shared database.</p>' +
       '<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">' +
       '<button class="btn btn-ghost" data-action="export-backup">' + icon('download', 15) + ' Export Backup</button>' +
       '<button class="btn btn-ghost" data-action="import-backup">' + icon('save', 15) + ' Import Backup</button>' +
@@ -1972,9 +1982,7 @@ window._db = {
       var records = Object.assign({}, state.att.records, { __familyPresent: pv, __familyAbsent: av, __familyExcused: ev, __familyGuest: gv });
       state.att.records = records;
       var key = state.att.groupId + '__' + state.att.date;
-      var next = Object.assign({}, state.attendance);
-      next[key] = records;
-      persistAttendance(next);
+      upsertAttendanceRecord(key, records);
       state.att.dirty = false;
       flash('Attendance saved');
       return;
@@ -2003,7 +2011,7 @@ window._db = {
     if (action === 'admin-delete-no') { state.admin.confirmDeleteId = null; render(); return; }
     if (action === 'admin-delete-yes') {
       var id = el.getAttribute('data-id');
-      persistGroups(state.groups.filter(function (g) { return g.id !== id; }));
+      deleteGroupById(id);
       state.admin.confirmDeleteId = null;
       if (state.admin.editId === id) state.admin.editId = null;
       flash('Dgroup removed');
@@ -2028,7 +2036,7 @@ window._db = {
     if (action === 'story-delete-no') { state.storyAdmin.confirmDeleteId = null; render(); return; }
     if (action === 'story-delete-yes') {
       var storyDelId = el.getAttribute('data-id');
-      persistStories(state.stories.filter(function (s) { return s.id !== storyDelId; }));
+      deleteStoryById(storyDelId);
       state.storyAdmin.confirmDeleteId = null;
       if (state.storyAdmin.editId === storyDelId) { state.storyAdmin.editId = null; state.storyAdmin.images = []; state.storyAdmin.draft = null; }
       flash('Story removed');
@@ -2114,8 +2122,7 @@ window._db = {
       photo: photo,
       members: existing && Array.isArray(existing.members) ? existing.members : []
     };
-    var next = editing ? state.groups.map(function (g) { return g.id === payload.id ? payload : g; }) : state.groups.concat([payload]);
-    persistGroups(next);
+    upsertGroup(payload);
     state.admin.editId = null;
     state.admin.errors = {};
     state.admin.photoData = null;
@@ -2149,8 +2156,7 @@ window._db = {
       date: existing ? existing.date : todayISO(),
       createdAt: existing ? existing.createdAt : new Date().toISOString()
     };
-    var next = editing ? state.stories.map(function (s) { return s.id === payload.id ? payload : s; }) : state.stories.concat([payload]);
-    persistStories(next);
+    upsertStory(payload);
     state.storyAdmin.editId = null;
     state.storyAdmin.errors = {};
     state.storyAdmin.images = [];
